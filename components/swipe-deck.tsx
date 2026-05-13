@@ -2,6 +2,7 @@
 
 import {
   forwardRef,
+  useCallback,
   useEffect,
   useImperativeHandle,
   useMemo,
@@ -40,9 +41,26 @@ export function SwipeDeck({ initial }: { initial: Listing[] }) {
   const [deck, setDeck] = useState(initial);
   const [history, setHistory] = useState<Array<{ listing: Listing; decision: Decision }>>([]);
   const [hoverDecision, setHoverDecision] = useState<Decision | null>(null);
-  const [showHelp, setShowHelp] = useState(false);
+  // photoIdx lives here (not inside SwipeCard) so the keyboard handler can
+  // update it directly without ref indirection. Reset to 0 on top change.
+  const [photoIdx, setPhotoIdx] = useState(0);
   const topRef = useRef<CardHandle | null>(null);
   const top = deck[0];
+  const topPhotos = (top?.photoUrls as string[] | null) ?? [];
+
+  useEffect(() => {
+    setPhotoIdx(0);
+  }, [top?.id]);
+
+  const nextPhoto = useCallback(() => {
+    if (topPhotos.length < 2) return;
+    setPhotoIdx((i) => (i + 1) % topPhotos.length);
+  }, [topPhotos.length]);
+
+  const prevPhoto = useCallback(() => {
+    if (topPhotos.length < 2) return;
+    setPhotoIdx((i) => (i === 0 ? topPhotos.length - 1 : i - 1));
+  }, [topPhotos.length]);
 
   async function decide(listing: Listing, decision: Decision, skipAnim = false) {
     if (!skipAnim && topRef.current && listing.id === top?.id) {
@@ -92,17 +110,17 @@ export function SwipeDeck({ initial }: { initial: Listing[] }) {
       else if (e.key === " " || e.code === "Space") {
         e.preventDefault();
         e.stopPropagation();
-        topRef.current?.nextPhoto();
+        nextPhoto();
       }
-      else if (e.key === "ArrowDown") { e.preventDefault(); topRef.current?.prevPhoto(); }
+      else if (e.key === "ArrowDown") { e.preventDefault(); prevPhoto(); }
       else if ((e.key === "z" || e.key === "Z") && (e.metaKey || e.ctrlKey)) { e.preventDefault(); undo(); }
-      else if (e.key === "?" || e.key === "/") setShowHelp((s) => !s);
+      // (no help-toggle key — shortcuts are always visible in the top bar)
     }
     // Capture phase so we beat any focused button's default activation.
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [top?.id, history.length]);
+  }, [top?.id, history.length, nextPhoto, prevPhoto]);
 
   const pins = useMemo(() => {
     const recent = history.slice(-30);
@@ -167,6 +185,8 @@ export function SwipeDeck({ initial }: { initial: Listing[] }) {
                 listing={listing}
                 isTop={isTop}
                 depth={arr.length - 1 - i}
+                photoIdx={isTop ? photoIdx : 0}
+                onPhotoChange={isTop ? setPhotoIdx : () => {}}
                 onDecide={(d) => decide(listing, d, true)}
                 onHoverDecision={isTop ? setHoverDecision : undefined}
               />
@@ -182,52 +202,27 @@ export function SwipeDeck({ initial }: { initial: Listing[] }) {
           hoverDecision={hoverDecision}
         />
         <DeckCounter remaining={deck.length} history={history} />
-        <HelpHint show={showHelp} onClose={() => setShowHelp(false)} />
+        <ShortcutBar />
       </div>
     </div>
   );
 }
 
-function HelpHint({ show, onClose }: { show: boolean; onClose: () => void }) {
-  if (!show) {
-    return (
-      <button
-        onClick={() => onClose()}
-        title="Show shortcuts (?)"
-        className="absolute top-3 left-3 z-[130] w-9 h-9 rounded-full bg-white/90 backdrop-blur border border-ink-100 shadow-sm flex items-center justify-center hover:bg-white"
-      >
-        <Keyboard className="w-4 h-4 text-ink-900/60" />
-      </button>
-    );
-  }
+function ShortcutBar() {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: -8 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="absolute top-3 left-3 z-[130] bg-white/95 backdrop-blur border border-ink-100 shadow-md rounded-2xl px-4 py-3 max-w-[280px]"
-    >
-      <div className="flex items-center justify-between mb-2">
-        <div className="text-xs font-semibold uppercase tracking-wider text-ink-900/60 flex items-center gap-1.5">
-          <Keyboard className="w-3.5 h-3.5" /> Shortcuts
-        </div>
-        <button
-          onClick={onClose}
-          className="text-ink-900/40 hover:text-ink-900/80 text-sm"
-          title="Hide"
-        >
-          ✕
-        </button>
+    <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[130]">
+      <div className="bg-white/90 backdrop-blur border border-ink-100 shadow-sm rounded-full px-3.5 py-1.5 flex items-center gap-2 text-[11px] font-medium text-ink-900/70">
+        <Kbd>←</Kbd><span className="text-accent-no font-semibold">nope</span>
+        <span className="text-ink-900/20">·</span>
+        <Kbd>↑</Kbd><span className="text-amber-600 font-semibold">maybe</span>
+        <span className="text-ink-900/20">·</span>
+        <Kbd>→</Kbd><span className="text-accent-yes font-semibold">yes</span>
+        <span className="text-ink-900/20">·</span>
+        <Kbd>space</Kbd><span>photo</span>
+        <span className="text-ink-900/20">·</span>
+        <Kbd>⌘Z</Kbd><span>undo</span>
       </div>
-      <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-xs">
-        <Kbd>←</Kbd><span>Nope (or drag left)</span>
-        <Kbd>→</Kbd><span>Yes (or drag right)</span>
-        <Kbd>↑</Kbd><span>Maybe (or drag up)</span>
-        <Kbd>Space</Kbd><span>Next photo (or click photo)</span>
-        <Kbd>↓</Kbd><span>Previous photo</span>
-        <Kbd>⌘Z</Kbd><span>Undo</span>
-        <Kbd>?</Kbd><span>Toggle this help</span>
-      </div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -267,15 +262,16 @@ const SwipeCard = forwardRef<CardHandle, {
   listing: Listing;
   isTop: boolean;
   depth: number;
+  photoIdx: number;
+  onPhotoChange: (i: number) => void;
   onDecide: (d: Decision) => void;
   onHoverDecision?: (d: Decision | null) => void;
 }>(function SwipeCard(
-  { listing, isTop, depth, onDecide, onHoverDecision },
+  { listing, isTop, depth, photoIdx, onPhotoChange, onDecide, onHoverDecision },
   ref
 ) {
   const x = useMotionValue(0);
   const y = useMotionValue(0);
-  // Wider rotation range so the imperative flight gets dramatic rotation at the extremes.
   const rotate = useTransform(x, [-700, 0, 700], [-45, 0, 45]);
   const yesOpacity = useTransform(x, [40, 160], [0, 1]);
   const noOpacity = useTransform(x, [-160, -40], [1, 0]);
@@ -283,7 +279,6 @@ const SwipeCard = forwardRef<CardHandle, {
   const photos = (listing.photoUrls as string[] | null) ?? [];
   const sources = (listing.sources as any[] | null) ?? [];
   const prices = (listing.pricesBySource as Record<string, number> | null) ?? {};
-  const [photoIdx, setPhotoIdx] = useState(0);
 
   useImperativeHandle(
     ref,
@@ -291,29 +286,29 @@ const SwipeCard = forwardRef<CardHandle, {
       swipe: async (direction) => {
         const ease = [0.22, 1, 0.36, 1] as const;
         if (direction === "yes") {
-          // Dramatic: launch hard right, kick upward then arc down, big rotation.
-          // Multi-stage feels like throwing a card across the room.
+          // Big yes: 2400px throw, two-stage Y arc, full 0.7s flight.
           await Promise.all([
-            animate(x, 1800, { duration: 0.55, ease }),
+            animate(x, 2400, { duration: 0.7, ease }),
             (async () => {
-              await animate(y, -180, { duration: 0.22, ease: [0.34, 0, 0.5, 1] as const });
-              await animate(y, 120, { duration: 0.33, ease: [0.5, 0, 0.7, 1] as const });
+              await animate(y, -220, { duration: 0.28, ease: [0.34, 0, 0.5, 1] as const });
+              await animate(y, 160, { duration: 0.42, ease: [0.5, 0, 0.7, 1] as const });
             })(),
           ]);
         } else if (direction === "no") {
           await Promise.all([
-            animate(x, -1400, { duration: 0.42, ease }),
-            animate(y, -80, { duration: 0.42, ease }),
+            animate(x, -1800, { duration: 0.5, ease }),
+            animate(y, -100, { duration: 0.5, ease }),
           ]);
         } else {
-          await animate(y, -1200, { duration: 0.45, ease });
+          await animate(y, -1400, { duration: 0.5, ease });
         }
       },
-      nextPhoto: () => setPhotoIdx((i) => (photos.length ? (i + 1) % photos.length : 0)),
-      prevPhoto: () =>
-        setPhotoIdx((i) => (photos.length ? (i === 0 ? photos.length - 1 : i - 1) : 0)),
+      // Kept for backwards-compat with old call sites; the parent now drives
+      // photo state directly via the `photoIdx` prop + onPhotoChange callback.
+      nextPhoto: () => onPhotoChange(photos.length ? (photoIdx + 1) % photos.length : 0),
+      prevPhoto: () => onPhotoChange(photos.length ? (photoIdx === 0 ? photos.length - 1 : photoIdx - 1) : 0),
     }),
-    [x, y, photos.length]
+    [x, y, photos.length, photoIdx, onPhotoChange]
   );
 
   // Reactive hover decision based on drag
@@ -372,16 +367,15 @@ const SwipeCard = forwardRef<CardHandle, {
           className="relative bg-ink-100 overflow-hidden group"
           onTap={(e, info) => {
             if (!isTop || photos.length < 2) return;
-            // Ignore taps that came after a drag
             const moved = Math.abs(x.get()) + Math.abs(y.get());
             if (moved > 10) return;
             const target = e.currentTarget as HTMLElement;
             const rect = target.getBoundingClientRect();
             const rel = info.point.x - rect.left;
             if (rel < rect.width / 2) {
-              setPhotoIdx((i) => (i === 0 ? photos.length - 1 : i - 1));
+              onPhotoChange(photoIdx === 0 ? photos.length - 1 : photoIdx - 1);
             } else {
-              setPhotoIdx((i) => (i + 1) % photos.length);
+              onPhotoChange((photoIdx + 1) % photos.length);
             }
           }}
         >
@@ -414,13 +408,13 @@ const SwipeCard = forwardRef<CardHandle, {
                 ))}
               </div>
               <button
-                onClick={(e) => { e.stopPropagation(); setPhotoIdx((i) => (i === 0 ? photos.length - 1 : i - 1)); }}
+                onClick={(e) => { e.stopPropagation(); (e.currentTarget as HTMLElement).blur(); onPhotoChange(photoIdx === 0 ? photos.length - 1 : photoIdx - 1); }}
                 className="absolute top-1/2 left-2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/30 backdrop-blur-sm text-white flex items-center justify-center hover:bg-black/50 opacity-0 group-hover:opacity-100 transition"
               >
                 <ChevronLeft className="w-5 h-5" />
               </button>
               <button
-                onClick={(e) => { e.stopPropagation(); setPhotoIdx((i) => (i + 1) % photos.length); }}
+                onClick={(e) => { e.stopPropagation(); (e.currentTarget as HTMLElement).blur(); onPhotoChange((photoIdx + 1) % photos.length); }}
                 className="absolute top-1/2 right-2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/30 backdrop-blur-sm text-white flex items-center justify-center hover:bg-black/50 opacity-0 group-hover:opacity-100 transition"
               >
                 <ChevronRight className="w-5 h-5" />

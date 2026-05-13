@@ -4,10 +4,12 @@ import { desc, inArray } from "drizzle-orm";
 import type { ScrapeResult } from "./scrapers";
 
 const FROM = process.env.EMAIL_FROM ?? "SF Apt Finder <onboarding@resend.dev>";
-const TO = (process.env.EMAIL_TO ?? "viraat.laldas@gmail.com")
+const TO = (process.env.EMAIL_TO ?? "viraat.laldas@gmail.com,sambruns2000@gmail.com")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
+
+const MORE_LIMIT = 10;
 
 interface Featured {
   id: string;
@@ -23,6 +25,17 @@ interface Featured {
   addressLine: string | null;
 }
 
+interface MoreItem {
+  id: string;
+  title: string;
+  price: number;
+  neighborhood: string | null;
+  photo: string | null;
+  url: string;
+  source: string;
+  bedrooms: number | null;
+}
+
 export async function sendDailyDigest(result: ScrapeResult, siteUrl: string): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
@@ -35,7 +48,7 @@ export async function sendDailyDigest(result: ScrapeResult, siteUrl: string): Pr
   }
   const resend = new Resend(apiKey);
 
-  // Load full listing rows for the new ones so we can build featured cards.
+  // Load full rows for all of today's new IDs.
   const newIds = result.newListings.map((l) => l.id);
   const fullRows = newIds.length
     ? await db
@@ -45,22 +58,11 @@ export async function sendDailyDigest(result: ScrapeResult, siteUrl: string): Pr
         .orderBy(desc(schema.listings.firstSeenAt))
     : [];
 
-  // Pick 3 featured: prefer different sources, prefer listings with photos+area.
   const featured = pickFeatured(fullRows);
+  const more = pickMore(fullRows, featured);
 
-  // Group remaining by neighborhood
-  const grouped = new Map<string, ScrapeResult["newListings"]>();
-  for (const l of result.newListings) {
-    if (featured.some((f) => f.id === l.id)) continue;
-    const k = l.neighborhood ?? "Unknown area";
-    const arr = grouped.get(k) ?? [];
-    arr.push(l);
-    grouped.set(k, arr);
-  }
-  const groups = [...grouped.entries()].sort((a, b) => b[1].length - a[1].length);
-
-  const html = renderHtml(result, featured, groups, siteUrl);
-  const text = renderText(result, featured, groups, siteUrl);
+  const html = renderHtml(result, featured, more, siteUrl);
+  const text = renderText(result, featured, more, siteUrl);
 
   const { data, error } = await resend.emails.send({
     from: FROM,
@@ -76,36 +78,56 @@ export async function sendDailyDigest(result: ScrapeResult, siteUrl: string): Pr
   }
 }
 
+/** Score: photos > area > coords > bath/sqft/description. */
+function score(r: typeof schema.listings.$inferSelect): number {
+  let s = 0;
+  if ((r.photoUrls as string[] | null)?.length) s += 8;
+  if ((r.photoUrls as string[] | null)?.length && (r.photoUrls as string[]).length > 1) s += 3;
+  if (r.neighborhood) s += 4;
+  if (r.lat && r.lng) s += 2;
+  if (r.bathrooms != null) s += 1;
+  if (r.sqft) s += 1;
+  if (r.description) s += 1;
+  return s;
+}
+
+function sourceOf(r: typeof schema.listings.$inferSelect): string {
+  return ((r.sources as any[] | null)?.[0]?.source as string) ?? "unknown";
+}
+
+/** Pick 3 featured — STRICTLY from different sources when possible. */
 function pickFeatured(rows: (typeof schema.listings.$inferSelect)[]): Featured[] {
   if (!rows.length) return [];
-
-  const score = (r: typeof schema.listings.$inferSelect) => {
-    let s = 0;
-    if ((r.photoUrls as string[] | null)?.length) s += 5;
-    if (r.neighborhood) s += 3;
-    if (r.lat && r.lng) s += 2;
-    if (r.bathrooms != null) s += 1;
-    if (r.sqft) s += 1;
-    if (r.description) s += 1;
-    return s;
-  };
-
-  const sorted = [...rows].sort((a, b) => score(b) - score(a));
-
-  // Greedy pick: take best, then prefer different source for next picks.
-  const picks: typeof schema.listings.$inferSelect[] = [];
-  const usedSources = new Set<string>();
-  for (const r of sorted) {
-    if (picks.length >= 3) break;
-    const src = ((r.sources as any[] | null)?.[0]?.source as string) ?? "x";
-    if (usedSources.has(src) && picks.length < sorted.length / 2) continue;
-    picks.push(r);
-    usedSources.add(src);
+  // Group by source; pick the highest-scored from each
+  const bySource = new Map<string, typeof schema.listings.$inferSelect>();
+  for (const r of rows) {
+    if (!((r.photoUrls as string[] | null)?.length)) continue; // featured MUST have a photo
+    const src = sourceOf(r);
+    const prev = bySource.get(src);
+    if (!prev || score(r) > score(prev)) bySource.set(src, r);
   }
-  // Top up if we under-filled
-  for (const r of sorted) {
+  // Pick top 3 sources by their best listing score, in this preferred order
+  const preferredOrder = ["zillow", "apartments-com", "trulia", "padmapper", "craigslist", "hotpads"];
+  const picks: typeof schema.listings.$inferSelect[] = [];
+  for (const src of preferredOrder) {
     if (picks.length >= 3) break;
-    if (!picks.includes(r)) picks.push(r);
+    const candidate = bySource.get(src);
+    if (candidate) picks.push(candidate);
+  }
+  // Top up from any remaining sources if we have fewer than 3
+  for (const [src, candidate] of bySource) {
+    if (picks.length >= 3) break;
+    if (!picks.some((p) => sourceOf(p) === src)) picks.push(candidate);
+  }
+  // If we STILL have <3 (only one source today), take more from that source by score
+  if (picks.length < 3) {
+    const remaining = rows
+      .filter((r) => !picks.includes(r))
+      .sort((a, b) => score(b) - score(a));
+    for (const r of remaining) {
+      if (picks.length >= 3) break;
+      picks.push(r);
+    }
   }
 
   return picks.map((r): Featured => {
@@ -127,15 +149,41 @@ function pickFeatured(rows: (typeof schema.listings.$inferSelect)[]): Featured[]
   });
 }
 
+/** Up to 10 additional listings (excluding featured), sorted by score. */
+function pickMore(
+  rows: (typeof schema.listings.$inferSelect)[],
+  featured: Featured[]
+): MoreItem[] {
+  const featuredIds = new Set(featured.map((f) => f.id));
+  return rows
+    .filter((r) => !featuredIds.has(r.id))
+    .sort((a, b) => score(b) - score(a))
+    .slice(0, MORE_LIMIT)
+    .map((r): MoreItem => {
+      const photos = (r.photoUrls as string[] | null) ?? [];
+      const sources = (r.sources as any[] | null) ?? [];
+      return {
+        id: r.id,
+        title: r.title,
+        price: r.price ?? 0,
+        neighborhood: r.neighborhood,
+        photo: photos[0] ?? null,
+        url: sources[0]?.url ?? "",
+        source: sources[0]?.source ?? "?",
+        bedrooms: r.bedrooms,
+      };
+    });
+}
+
 function renderText(
   result: ScrapeResult,
   featured: Featured[],
-  groups: Array<[string, ScrapeResult["newListings"]]>,
+  more: MoreItem[],
   siteUrl: string
 ): string {
   const lines: string[] = [];
-  lines.push(`${result.newCount} new SF apartments today.`);
-  lines.push(`Swipe: ${siteUrl}\n`);
+  lines.push(`🏠 ${result.newCount} new SF apartments today`);
+  lines.push(`→ ${siteUrl}\n`);
   if (featured.length) {
     lines.push("== Featured ==");
     for (const f of featured) {
@@ -144,81 +192,80 @@ function renderText(
       lines.push(`    ${f.url}\n`);
     }
   }
-  for (const [hood, items] of groups) {
-    lines.push(`== ${hood} (${items.length}) ==`);
-    for (const it of items) {
-      lines.push(`  $${it.price.toLocaleString()} — ${it.title}`);
-      lines.push(`    ${it.url}`);
+  if (more.length) {
+    lines.push(`== ${more.length} more ==`);
+    for (const it of more) {
+      lines.push(`  $${it.price.toLocaleString()} · ${it.neighborhood ?? "—"} · ${it.source} · ${it.title}`);
     }
     lines.push("");
   }
+  lines.push(`→ View all ${result.newCount} at ${siteUrl}`);
   return lines.join("\n");
 }
 
 function renderHtml(
   result: ScrapeResult,
   featured: Featured[],
-  groups: Array<[string, ScrapeResult["newListings"]]>,
+  more: MoreItem[],
   siteUrl: string
 ): string {
   const featuredHtml = featured.length
     ? featured.map((f) => renderFeatured(f)).join("")
     : "";
 
-  const groupsHtml = groups
-    .map(([hood, items]) => {
-      const rows = items
-        .map(
-          (it) => `
-        <tr><td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;font:14px -apple-system,sans-serif">
-          <a href="${it.url}" style="color:#0a0a0c;text-decoration:none">
-            <strong>$${it.price.toLocaleString()}</strong>
-            <span style="color:#888"> · ${escape(it.title)}</span>
-          </a>
-        </td></tr>`
-        )
-        .join("");
-      return `
-      <h3 style="font:600 15px -apple-system,sans-serif;margin:24px 0 8px;color:#0a0a0c">
-        📍 ${escape(hood)} <span style="color:#999;font-weight:400;font-size:13px">· ${items.length}</span>
-      </h3>
-      <table style="width:100%;border-collapse:collapse">${rows}</table>`;
-    })
-    .join("");
+  const moreHtml = more.length
+    ? `
+    <h2 style="font:600 16px -apple-system,sans-serif;margin:32px 0 12px 4px;color:#0a0a0c">
+      Also new today
+    </h2>
+    <table style="width:100%;border-collapse:separate;border-spacing:0;background:#fff;border:1px solid #eee;border-radius:16px;overflow:hidden">
+      ${more.map((it, i) => renderRow(it, i === more.length - 1)).join("")}
+    </table>` : "";
 
   return `<!doctype html>
-  <html><body style="background:#fafaf9;margin:0;padding:24px;color:#0a0a0c;font-family:-apple-system,sans-serif">
+  <html><body style="background:#f5f5f4;margin:0;padding:24px;color:#0a0a0c;font-family:-apple-system,BlinkMacSystemFont,sans-serif">
     <div style="max-width:680px;margin:0 auto">
-      <div style="background:#fff;border:1px solid #eee;border-radius:20px;padding:32px;margin-bottom:16px">
-        <h1 style="font:600 28px ui-serif,Georgia,serif;margin:0 0 4px;letter-spacing:-0.5px">
-          🏠 ${result.newCount} new SF apartments
+
+      <!-- HERO: count + big CTA -->
+      <div style="background:#0a0a0c;color:#fff;border-radius:24px;padding:32px;margin-bottom:20px">
+        <div style="font:600 12px ui-monospace,monospace;letter-spacing:0.12em;text-transform:uppercase;color:#888;margin-bottom:8px">
+          ${todayLabel()}
+        </div>
+        <h1 style="font:600 36px ui-serif,Georgia,serif;margin:0 0 6px;letter-spacing:-0.6px;line-height:1.05">
+          ${result.newCount} new
         </h1>
-        <p style="color:#666;font-size:14px;margin:0 0 24px">
-          ${result.totalRaw} scraped → ${result.totalMerged} deduped across ${Object.keys(result.perSource).filter((s) => result.perSource[s as keyof typeof result.perSource]?.raw).length} sources
-        </p>
-        <a href="${siteUrl}" style="display:inline-block;background:#0a0a0c;color:#fff;padding:12px 22px;border-radius:999px;text-decoration:none;font-weight:600;font-size:14px">
+        <div style="font:600 36px ui-serif,Georgia,serif;margin:0 0 20px;letter-spacing:-0.6px;line-height:1.05;color:#a8a29e">
+          SF apartments to review
+        </div>
+        <a href="${siteUrl}"
+           style="display:inline-block;background:#fff;color:#0a0a0c;padding:14px 26px;border-radius:999px;text-decoration:none;font-weight:700;font-size:15px">
           Swipe through them →
         </a>
+        <div style="margin-top:14px;color:#888;font-size:12px">
+          ${result.totalRaw} scraped → ${result.totalMerged} deduped across ${Object.keys(result.perSource).filter((s) => result.perSource[s as keyof typeof result.perSource]?.raw).length} sites
+        </div>
       </div>
 
       ${featuredHtml ? `
-      <div style="margin:0 0 24px">
-        <h2 style="font:600 16px -apple-system,sans-serif;margin:0 0 12px;color:#0a0a0c">
-          ⭐ Featured today
+      <div>
+        <h2 style="font:600 16px -apple-system,sans-serif;margin:8px 0 14px 4px;color:#0a0a0c">
+          ⭐ Featured — one from each site
         </h2>
         ${featuredHtml}
       </div>` : ""}
 
-      ${groupsHtml ? `
-      <div style="background:#fff;border:1px solid #eee;border-radius:20px;padding:24px">
-        <h2 style="font:600 16px -apple-system,sans-serif;margin:0 0 4px;color:#0a0a0c">
-          All new finds by area
-        </h2>
-        ${groupsHtml}
-      </div>` : ""}
+      ${moreHtml}
+
+      <!-- BOTTOM CTA -->
+      <div style="text-align:center;margin:32px 0 8px">
+        <a href="${siteUrl}"
+           style="display:inline-block;background:#0a0a0c;color:#fff;padding:14px 26px;border-radius:999px;text-decoration:none;font-weight:700;font-size:14px">
+          View all ${result.newCount} on apt-tinder →
+        </a>
+      </div>
 
       <p style="margin-top:24px;color:#999;font-size:12px;text-align:center">
-        apt-tinder · daily at 7:05 AM PT
+        apt-tinder · daily at 7:05 AM PT · sent to ${TO.length} ${TO.length === 1 ? "person" : "people"}
       </p>
     </div>
   </body></html>`;
@@ -231,27 +278,58 @@ function renderFeatured(f: Featured): string {
   if (f.sqft) specs.push(`${f.sqft.toLocaleString()} sqft`);
 
   const img = f.photo
-    ? `<img src="${f.photo}" alt="" style="width:100%;height:200px;object-fit:cover;display:block">`
-    : `<div style="width:100%;height:200px;background:#f0f0f0;display:flex;align-items:center;justify-content:center;font-size:48px;color:#ccc">🏠</div>`;
+    ? `<img src="${f.photo}" alt="" style="width:100%;height:240px;object-fit:cover;display:block">`
+    : `<div style="width:100%;height:240px;background:#f0f0f0;display:flex;align-items:center;justify-content:center;font-size:60px;color:#ccc">🏠</div>`;
 
   return `
-    <a href="${f.url}" style="display:block;text-decoration:none;color:#0a0a0c;margin-bottom:12px">
-      <div style="background:#fff;border:1px solid #eee;border-radius:16px;overflow:hidden">
+    <a href="${f.url}" style="display:block;text-decoration:none;color:#0a0a0c;margin-bottom:14px">
+      <div style="background:#fff;border:1px solid #eee;border-radius:18px;overflow:hidden">
         ${img}
-        <div style="padding:16px">
+        <div style="padding:16px 18px">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:6px">
-            <div style="font:700 22px ui-serif,Georgia,serif">$${f.price.toLocaleString()}<span style="font-size:13px;color:#888;font-weight:400"> /mo</span></div>
+            <div style="font:700 24px ui-serif,Georgia,serif">$${f.price.toLocaleString()}<span style="font-size:13px;color:#888;font-weight:400"> /mo</span></div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
-              ${f.neighborhood ? `<span style="background:#0a0a0c;color:#fff;border-radius:999px;padding:3px 10px;font-size:11px;font-weight:600">📍 ${escape(f.neighborhood)}</span>` : ""}
-              <span style="background:#f0f0f0;color:#666;border-radius:999px;padding:3px 10px;font-size:11px;font-weight:600">${escape(f.source)}</span>
+              ${f.neighborhood ? `<span style="background:#0a0a0c;color:#fff;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:600">📍 ${escape(f.neighborhood)}</span>` : ""}
+              <span style="background:#ec4899;color:#fff;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:600">${escape(f.source)}</span>
             </div>
           </div>
           <div style="font-size:13px;color:#444;line-height:1.4;margin-bottom:6px">${escape(f.title)}</div>
           ${f.addressLine ? `<div style="font-size:12px;color:#888;margin-bottom:6px">${escape(f.addressLine)}</div>` : ""}
-          ${specs.length ? `<div style="font-size:12px;color:#666">${specs.join(" · ")}</div>` : ""}
+          ${specs.length ? `<div style="font-size:12px;color:#666;font-weight:600">${specs.join(" · ")}</div>` : ""}
         </div>
       </div>
     </a>`;
+}
+
+function renderRow(it: MoreItem, isLast: boolean): string {
+  const thumb = it.photo
+    ? `<img src="${it.photo}" alt="" width="64" height="64" style="width:64px;height:64px;object-fit:cover;border-radius:10px;display:block">`
+    : `<div style="width:64px;height:64px;background:#f0f0f0;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:24px;color:#ccc">🏠</div>`;
+  const border = isLast ? "" : "border-bottom:1px solid #f0f0f0;";
+  return `
+    <tr>
+      <td style="padding:10px 16px;${border}">
+        <a href="${it.url}" style="text-decoration:none;color:#0a0a0c;display:block">
+          <table style="width:100%;border-collapse:collapse">
+            <tr>
+              <td style="width:64px;padding-right:14px;vertical-align:middle">${thumb}</td>
+              <td style="vertical-align:middle">
+                <div style="font:700 17px -apple-system,sans-serif;margin-bottom:2px">$${it.price.toLocaleString()}<span style="font-size:12px;color:#888;font-weight:400"> /mo</span></div>
+                <div style="font-size:12px;color:#555;line-height:1.35;margin-bottom:2px">${escape(it.title).slice(0, 90)}</div>
+                <div style="font-size:11px;color:#888">
+                  ${it.neighborhood ? `📍 ${escape(it.neighborhood)} · ` : ""}${escape(it.source)}
+                </div>
+              </td>
+            </tr>
+          </table>
+        </a>
+      </td>
+    </tr>`;
+}
+
+function todayLabel(): string {
+  const d = new Date();
+  return d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
 }
 
 function escape(s: string): string {
