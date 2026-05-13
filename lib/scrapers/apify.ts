@@ -52,57 +52,50 @@ const SF_SEARCH_URLS = {
 };
 
 const ACTORS: ApifyActor[] = [
-  // Zillow — accepts searchUrls
+  // Zillow via igolaizola/zillow-scraper-ppe — returns full photo galleries.
+  // Pay-per-result: ~$0.0009 per listing on BRONZE plan. ~150 SF listings = ~$0.14/run.
   {
     source: "zillow",
-    actorId: "maxcopell~zillow-scraper",
+    actorId: "igolaizola~zillow-scraper-ppe",
     buildInput: (ctx) => ({
-      searchUrls: [{ url: SF_SEARCH_URLS.zillow(ctx.bedrooms, ctx.maxPrice) }],
-      extractionMethod: "MAP_MARKERS",
+      location: "San Francisco, CA",
+      operation: "rent",
+      minBeds: ctx.bedrooms,
+      maxPrice: ctx.maxPrice,
+      maxItems: 200,
     }),
     normalize: (r, ctx) => {
-      // Apify returns price as a string like "$7,098/mo" or "$4,300+/mo".
-      // For "$X+/mo" listings (building with price range starting at X), use X as the floor.
-      const price =
-        toMoney(r?.price) ||
-        toMoney(r?.units?.[0]?.price) ||
-        toMoney(r?.hdpData?.homeInfo?.price) ||
-        0;
+      const price = typeof r?.price?.value === "number" ? r.price.value : toMoney(r?.price);
       if (!price || price > ctx.maxPrice) return null;
-      const url =
-        r?.detailUrl?.startsWith?.("http") ? r.detailUrl :
-        r?.detailUrl ? `https://www.zillow.com${r.detailUrl}` :
-        r?.url ?? null;
-      if (!url) return null;
-      // Photos: imgSrc is the hero; carouselPhotos array has more.
-      const photoUrls: string[] = [];
-      if (r?.imgSrc && typeof r.imgSrc === "string") photoUrls.push(r.imgSrc);
-      if (Array.isArray(r?.carouselPhotos)) {
-        for (const p of r.carouselPhotos) {
-          const u = p?.url ?? p?.src ?? p;
-          if (typeof u === "string" && u.startsWith("http")) photoUrls.push(u);
-        }
+      const detailPath = r?.url ?? `/homedetails/${r?.zpid}_zpid/`;
+      const url = detailPath.startsWith("http") ? detailPath : `https://www.zillow.com${detailPath}`;
+      const photos: string[] = [];
+      const hi = r?.media?.allPropertyPhotos?.highResolution;
+      if (Array.isArray(hi)) {
+        for (const p of hi) if (typeof p === "string" && p.startsWith("http")) photos.push(p);
       }
+      const addr = r?.address ?? {};
+      const addressLine = [addr.streetAddress, addr.city, addr.state].filter(Boolean).join(", ");
       return {
         source: "zillow",
-        sourceId: String(r?.zpid ?? r?.id ?? url),
+        sourceId: String(r?.zpid ?? url),
         url,
-        title: r?.address ?? r?.statusText ?? "Zillow listing",
+        title: addressLine || r?.title || "Zillow listing",
         price,
-        bedrooms: typeof r?.beds === "number" ? r.beds : r?.hdpData?.homeInfo?.bedrooms,
-        bathrooms: typeof r?.baths === "number" ? r.baths : r?.hdpData?.homeInfo?.bathrooms,
-        sqft: typeof r?.area === "number" ? r.area : r?.hdpData?.homeInfo?.livingArea,
-        addressLine: r?.address ?? r?.addressStreet,
-        zip: r?.addressZipcode ?? r?.hdpData?.homeInfo?.zipcode,
-        lat: r?.latLong?.latitude ?? r?.hdpData?.homeInfo?.latitude,
-        lng: r?.latLong?.longitude ?? r?.hdpData?.homeInfo?.longitude,
-        photoUrls: Array.from(new Set(photoUrls)).slice(0, 8),
+        bedrooms: typeof r?.bedrooms === "number" ? r.bedrooms : undefined,
+        bathrooms: typeof r?.bathrooms === "number" ? r.bathrooms : undefined,
+        sqft: typeof r?.livingArea === "number" ? r.livingArea : undefined,
+        addressLine: addr.streetAddress ?? addressLine,
+        zip: addr.zipcode,
+        lat: r?.location?.latitude,
+        lng: r?.location?.longitude,
+        photoUrls: photos.slice(0, 12),
         scrapedAt: new Date().toISOString(),
         raw: r,
       };
     },
   },
-  // Apartments.com
+  // Apartments.com — set includeDetails:true to get full photo gallery per listing.
   {
     source: "apartments-com",
     actorId: "pro100chok~apartments-scraper-usage",
@@ -110,7 +103,7 @@ const ACTORS: ApifyActor[] = [
       startUrls: [{ url: SF_SEARCH_URLS.apartments(ctx.bedrooms, ctx.maxPrice) }],
       maxPages: 2,
       maxItems: 60,
-      includeDetails: false,
+      includeDetails: true,
     }),
     normalize: (r, ctx) => genericNormalize(r, "apartments-com", ctx),
   },
