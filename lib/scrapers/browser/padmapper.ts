@@ -3,79 +3,154 @@ import type { RawListing, ScrapeContext } from "../types";
 import type { BrowserScraper } from "./index";
 
 /**
- * Padmapper — listing tiles in a left-side panel. Render then scrape.
+ * Padmapper — server-side rendered. Each page caps at ~22 listing cards.
+ * Strategy: visit each SF neighborhood page, parse cards, filter to 3BR + ≤maxPrice.
+ *
+ * Card shape (from inspection):
+ *   <div class="relative inline-block ... bg-gray-0 border ...">
+ *     <a href="/rentals/<id>/..."> or </buildings/<id>/...">
+ *     text: "VERIFIED | $4,595 | 2 Bedrooms · 1 Bathroom Apartment · Neighborhood | Address"
+ *   </div>
  */
+
+const SF_NEIGHBORHOODS = [
+  "pacific-heights",
+  "marina",
+  "russian-hill",
+  "north-beach",
+  "nob-hill",
+  "financial-district",
+  "soma",
+  "mission-bay",
+  "potrero-hill",
+  "mission",
+  "noe-valley",
+  "castro",
+  "hayes-valley",
+  "nopa",
+  "lower-haight",
+  "haight-ashbury",
+  "inner-sunset",
+  "sunset",
+  "richmond",
+  "western-addition",
+  "bernal-heights",
+];
+
 export const padmapper: BrowserScraper = {
   source: "padmapper",
   async scrape(ctx: ScrapeContext, page: Page): Promise<RawListing[]> {
-    const url = `https://www.padmapper.com/apartments/san-francisco-ca/${ctx.bedrooms}-bedrooms-under-${ctx.maxPrice}`;
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
-    await page.waitForTimeout(5000);
+    const all: RawListing[] = [];
+    const seen = new Set<string>();
+    const now = new Date().toISOString();
 
-    // Scroll the listings panel
-    for (let i = 0; i < 5; i++) {
-      await page.evaluate(() => {
-        const list = document.querySelector("[class*='ListingPane'], [class*='listings'], [class*='Results']");
-        (list ?? window).scrollBy?.(0, 1500);
-        window.scrollBy(0, 800);
+    // Cap to ~8 neighborhoods to stay within reasonable runtime (~80s).
+    // Iterate through them; later add more by setting PM_NEIGHBORHOODS env.
+    // Cover most of SF — ~15 neighborhoods runs in ~60s. Override with PM_NEIGHBORHOODS env.
+    const list = (process.env.PM_NEIGHBORHOODS ?? SF_NEIGHBORHOODS.slice(0, 15).join(",")).split(",");
+
+    for (const hood of list) {
+      const url = `https://www.padmapper.com/apartments/san-francisco-ca/${hood}`;
+      try {
+        await page.goto(url, { waitUntil: "domcontentloaded", timeout: 25000 });
+        await page.waitForTimeout(3500);
+      } catch (err) {
+        console.log(`[padmapper] ${hood} goto error`);
+        continue;
+      }
+
+      const rows = await page.evaluate(() => {
+        const cards = Array.from(
+          document.querySelectorAll<HTMLElement>("div.relative.inline-block.bg-gray-0")
+        );
+        const out: any[] = [];
+        for (const c of cards) {
+          const a = c.querySelector<HTMLAnchorElement>(
+            'a[href*="/rentals/"], a[href*="/buildings/"]'
+          );
+          if (!a) continue;
+          const text = (c.innerText ?? "").replace(/\n+/g, " | ").trim();
+          // "VERIFIED | $4,595 | 2 Bedrooms · 1 Bathroom Apartment · Lower Haight | 677 Oak Street #8"
+          // OR a price range: "$2,450–$4,800 | Studio–2 Bedrooms"
+          const priceM = text.match(/\$\s*([\d,]+)(?:\s*[–\-]\s*\$?\s*([\d,]+))?/);
+          if (!priceM) continue;
+          const priceA = parseInt(priceM[1].replace(/,/g, ""), 10);
+          const priceB = priceM[2] ? parseInt(priceM[2].replace(/,/g, ""), 10) : priceA;
+          // For range listings, use lowest price (the "from" price)
+          const price = Math.min(priceA, priceB);
+          // Bedroom: single value or range
+          const bedRange = text.match(/(\d+)\s*[–\-]\s*(\d+)\s*Bedrooms?/i);
+          const bedSingle = text.match(/(\d+)\s*Bedrooms?/i);
+          const bedStudio = /\bStudio\b/i.test(text);
+          let bedrooms: number | undefined;
+          let bedrooms_max: number | undefined;
+          if (bedRange) {
+            bedrooms = parseInt(bedRange[1], 10);
+            bedrooms_max = parseInt(bedRange[2], 10);
+          } else if (bedSingle) {
+            bedrooms = parseInt(bedSingle[1], 10);
+          } else if (bedStudio) {
+            bedrooms = 0;
+          }
+          const baM = text.match(/(\d+(?:\.\d+)?)\s*Bathrooms?/i);
+          const sqftM = text.match(/([\d,]+)\s*(?:sqft|sq\s*ft)/i);
+          // Address: usually after the last "|" if neighborhood is in text
+          const segs = text.split("|").map((s) => s.trim());
+          const addr = segs.find((s) =>
+            /^\d+\s+\w/.test(s) && /\b(st|ave|blvd|rd|dr|ct|pl|way|ter|street|avenue|boulevard|drive)\b/i.test(s)
+          );
+          const neighborhoodIn = segs
+            .map((s) => s.match(/(?:· |\| )?([A-Z][\w\s\-']+?)(?: \| | San Francisco)/i))
+            .find((m) => m)?.[1];
+          const img = c.querySelector("img")?.getAttribute("src") ?? null;
+
+          out.push({
+            href: a.href,
+            text: text.slice(0, 400),
+            price,
+            bedrooms,
+            bedrooms_max,
+            bathrooms: baM ? parseFloat(baM[1]) : undefined,
+            sqft: sqftM ? parseInt(sqftM[1].replace(/,/g, ""), 10) : undefined,
+            addressLine: addr,
+            neighborhood: neighborhoodIn?.trim(),
+            img: img && img.startsWith("http") ? img : null,
+          });
+        }
+        return out;
       });
-      await page.waitForTimeout(700);
-    }
 
-    const items = await page.evaluate((maxPrice) => {
-      // Padmapper listing links go to /apartment/<id>
-      const links = Array.from(
-        document.querySelectorAll<HTMLAnchorElement>('a[href*="/buildings/"], a[href*="/listing/"], a[href*="padmapper.com/apartment"]')
-      );
-      const seen = new Set<string>();
-      const out: any[] = [];
-      for (const a of links) {
-        const href = a.href;
-        if (!href || seen.has(href)) continue;
-        seen.add(href);
-        const card = a.closest("[class*='ListingItem'], [class*='listing-item'], li, article") as HTMLElement | null;
-        const root = card ?? a;
-        const text = (root.innerText ?? "").slice(0, 2000);
-        const priceM = text.match(/\$\s*([\d,]+)(?:\s*[-–]\s*\$\s*([\d,]+))?/);
-        if (!priceM) continue;
-        const priceA = parseInt(priceM[1].replace(/,/g, ""), 10);
-        const priceB = priceM[2] ? parseInt(priceM[2].replace(/,/g, ""), 10) : priceA;
-        const price = Math.min(priceA, priceB);
-        if (!Number.isFinite(price) || price > maxPrice) continue;
-        const bedM = text.match(/(\d+)\s*(?:bd|bed|br)/i);
-        const baM = text.match(/(\d+(?:\.\d+)?)\s*(?:ba|bath)/i);
-        const sqftM = text.match(/([\d,]+)\s*(?:sqft|sq\s*ft)/i);
-        const lines = text.split(/\n/).map((s: string) => s.trim()).filter(Boolean);
-        const addr = lines.find((l: string) => /\d.*(st|ave|blvd|rd|dr|ct|pl|way|ter)\b/i.test(l));
-        const img = root.querySelector("img")?.getAttribute("src") ?? null;
-        out.push({
-          sourceId: href.split("/").filter(Boolean).pop() ?? href,
-          href,
-          title: lines[0]?.slice(0, 200) ?? "Padmapper listing",
-          price,
-          bedrooms: bedM ? parseInt(bedM[1], 10) : undefined,
-          bathrooms: baM ? parseFloat(baM[1]) : undefined,
-          sqft: sqftM ? parseInt(sqftM[1].replace(/,/g, ""), 10) : undefined,
-          addressLine: addr,
-          img: img && img.startsWith("http") ? img : null,
+      console.log(`[padmapper] ${hood}: ${rows.length} cards (${rows.filter((r) => (r.bedrooms ?? 0) >= ctx.bedrooms || (r.bedrooms_max ?? 0) >= ctx.bedrooms).length} match beds)`);
+
+      for (const r of rows) {
+        if (seen.has(r.href)) continue;
+        // Filter: needs to match desired bed count (single OR within range)
+        const minB = r.bedrooms ?? 0;
+        const maxB = r.bedrooms_max ?? minB;
+        if (maxB < ctx.bedrooms) continue;
+        // Skip range listings where 3BR is above the high-end of the range
+        if (r.bedrooms_max != null && r.bedrooms_max < ctx.bedrooms) continue;
+        if (r.price > ctx.maxPrice) continue;
+        seen.add(r.href);
+        const slugId = r.href.match(/\/(?:rentals|buildings)\/([^/]+)/)?.[1] ?? r.href;
+        // Title: bedroom/bath summary
+        const title = r.addressLine ?? r.text.split("|")[1]?.trim() ?? "Padmapper listing";
+        all.push({
+          source: "padmapper",
+          sourceId: slugId,
+          url: r.href,
+          title: title.slice(0, 200),
+          price: r.price,
+          bedrooms: r.bedrooms,
+          bathrooms: r.bathrooms,
+          sqft: r.sqft,
+          addressLine: r.addressLine,
+          photoUrls: r.img ? [r.img] : [],
+          scrapedAt: now,
         });
       }
-      return out;
-    }, ctx.maxPrice);
+    }
 
-    const now = new Date().toISOString();
-    return items.map((it: any) => ({
-      source: "padmapper",
-      sourceId: String(it.sourceId),
-      url: it.href,
-      title: it.title,
-      price: it.price,
-      bedrooms: it.bedrooms,
-      bathrooms: it.bathrooms,
-      sqft: it.sqft,
-      addressLine: it.addressLine,
-      photoUrls: it.img ? [it.img] : [],
-      scrapedAt: now,
-    }));
+    return all;
   },
 };
