@@ -1,0 +1,29 @@
+app = "apt-tinder"
+primary_region = "sjc"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "3000"
+  SITE_URL = "https://apt-tinder.viraat.dev"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 512
+  processes = ["app"]
+
+[processes]
+  app = "node server.js"
+
+[deploy]
+  release_command = "npx drizzle-kit push"

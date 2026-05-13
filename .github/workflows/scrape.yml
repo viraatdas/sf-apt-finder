@@ -1,0 +1,44 @@
+name: Browser scrape (daily)
+
+on:
+  schedule:
+    # 14:10 UTC = 7:10 AM PDT (5 min after Vercel cron so Craigslist lands first)
+    - cron: "10 14 * * *"
+  workflow_dispatch:
+    inputs:
+      send_email:
+        description: "Send digest email"
+        required: false
+        default: "true"
+      sources:
+        description: "Optional single source (hotpads | apartments-com | padmapper)"
+        required: false
+        default: ""
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+      - run: npm ci --no-audit --no-fund
+      - name: Install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+      - name: Run browser scrape
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          SITE_URL: ${{ secrets.SITE_URL }}
+          SEARCH_BEDROOMS: ${{ vars.SEARCH_BEDROOMS || '3' }}
+          SEARCH_MAX_PRICE: ${{ vars.SEARCH_MAX_PRICE || '9000' }}
+        run: |
+          ARGS=""
+          if [ -n "${{ inputs.sources }}" ]; then ARGS="${{ inputs.sources }}"; fi
+          if [ "${{ inputs.send_email }}" != "false" ]; then ARGS="$ARGS --email"; fi
+          npx tsx scripts/scrape-browser.ts $ARGS
