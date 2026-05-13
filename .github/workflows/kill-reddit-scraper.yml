@@ -1,0 +1,48 @@
+name: Auto-kill runaway reddit-scraper-lite
+
+on:
+  schedule:
+    # Every 5 minutes (GitHub Actions minimum interval for free tier).
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+# Don't queue duplicate runs if one is still in flight.
+concurrency:
+  group: kill-reddit-scraper
+  cancel-in-progress: false
+
+jobs:
+  kill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Abort active reddit-scraper-lite runs
+        env:
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          REDDIT_ACTOR_ID: oAuCIx3ItNrs2okjQ
+        run: |
+          set -e
+          if [ -z "$APIFY_TOKEN" ]; then
+            echo "APIFY_TOKEN not set — nothing to do."; exit 0
+          fi
+          # Fetch the 30 most recent actor runs, filter for the reddit actor
+          # in non-terminal states, and abort each.
+          curl -fsSL "https://api.apify.com/v2/actor-runs?limit=30&desc=true&token=$APIFY_TOKEN" \
+            > runs.json
+          ACTIVE_IDS=$(jq -r --arg act "$REDDIT_ACTOR_ID" '
+            .data.items[]
+            | select(.actId == $act)
+            | select(.status == "RUNNING" or .status == "READY" or .status == "CREATED")
+            | .id
+          ' runs.json)
+          if [ -z "$ACTIVE_IDS" ]; then
+            echo "no active reddit-scraper-lite runs — nothing to kill"
+            exit 0
+          fi
+          for id in $ACTIVE_IDS; do
+            echo "aborting $id..."
+            code=$(curl -sS -o resp.txt -w "%{http_code}" \
+              -X POST "https://api.apify.com/v2/actor-runs/$id/abort?token=$APIFY_TOKEN")
+            echo "  HTTP $code"
+            head -c 200 resp.txt; echo
+          done
