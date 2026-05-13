@@ -24,22 +24,40 @@ interface MapPin {
   url?: string;
 }
 
-function PriceIcon({ price, color }: { price: number; color: string }) {
+function PriceIcon({
+  price,
+  color,
+  highlighted,
+  textColor = "#fff",
+}: {
+  price: number;
+  color: string;
+  highlighted?: boolean;
+  textColor?: string;
+}) {
+  const pad = highlighted ? "6px 12px" : "4px 8px";
+  const size = highlighted ? "13px" : "11px";
+  const border = highlighted ? "3px solid #fff" : "2px solid #fff";
+  const shadow = highlighted
+    ? "0 4px 14px rgba(0,0,0,.4), 0 0 0 2px #ec4899"
+    : "0 2px 6px rgba(0,0,0,.2)";
   const html = `<div style="
     background:${color};
-    color:#fff;
-    padding:4px 8px;
+    color:${textColor};
+    padding:${pad};
     border-radius:999px;
-    font:600 11px -apple-system,sans-serif;
+    font:700 ${size} -apple-system,sans-serif;
     white-space:nowrap;
-    box-shadow:0 2px 6px rgba(0,0,0,.2);
-    border:2px solid #fff;
+    box-shadow:${shadow};
+    border:${border};
+    transform: ${highlighted ? "scale(1.05)" : "scale(1)"};
+    transition: transform .2s;
   ">$${(price / 1000).toFixed(1)}k</div>`;
   return L.divIcon({
     html,
     className: "",
-    iconSize: [60, 24],
-    iconAnchor: [30, 12],
+    iconSize: highlighted ? [70, 32] : [60, 24],
+    iconAnchor: highlighted ? [35, 16] : [30, 12],
   });
 }
 
@@ -75,20 +93,24 @@ export function ListingMap({
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       {validPins.map((p) => {
+        // The currently-focused listing stands out clearly:
+        // bright pink + larger size + glowing ring. Everything else uses a
+        // muted palette so it doesn't compete visually.
         const color = p.highlighted
-          ? "#0a0a0c"
+          ? "#ec4899" // standout pink for the listing on the swipe card
           : p.decision === "yes"
-            ? "#2dd4bf"
+            ? "#10b981" // green
             : p.decision === "no"
-              ? "#fb7185"
+              ? "#cbd5e1" // faded gray-blue
               : p.decision === "maybe"
-                ? "#fcd34d"
-                : "#6366f1";
+                ? "#f59e0b" // amber
+                : "#94a3b8"; // muted slate gray for undecided
         return (
           <Marker
             key={p.id}
             position={[p.lat, p.lng]}
-            icon={PriceIcon({ price: p.price, color }) as any}
+            icon={PriceIcon({ price: p.price, color, highlighted: p.highlighted }) as any}
+            zIndexOffset={p.highlighted ? 1000 : 0}
           >
             <Popup>
               <div style={{ font: "13px -apple-system,sans-serif", minWidth: 160 }}>

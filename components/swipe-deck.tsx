@@ -40,7 +40,7 @@ export function SwipeDeck({ initial }: { initial: Listing[] }) {
   const [deck, setDeck] = useState(initial);
   const [history, setHistory] = useState<Array<{ listing: Listing; decision: Decision }>>([]);
   const [hoverDecision, setHoverDecision] = useState<Decision | null>(null);
-  const [showHelp, setShowHelp] = useState(true);
+  const [showHelp, setShowHelp] = useState(false);
   const topRef = useRef<CardHandle | null>(null);
   const top = deck[0];
 
@@ -78,21 +78,28 @@ export function SwipeDeck({ initial }: { initial: Listing[] }) {
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.target instanceof HTMLElement && ["INPUT", "TEXTAREA"].includes(e.target.tagName)) return;
+      // Don't hijack typing in form fields.
+      const tgt = e.target as HTMLElement | null;
+      if (tgt && ["INPUT", "TEXTAREA"].includes(tgt.tagName)) return;
       if (!top) return;
+      // Always release any stuck button focus so subsequent keys reach us.
+      if (tgt instanceof HTMLButtonElement) tgt.blur();
+
       if (e.key === "ArrowLeft") { e.preventDefault(); decide(top, "no"); }
       else if (e.key === "ArrowRight") { e.preventDefault(); decide(top, "yes"); }
       else if (e.key === "ArrowUp") { e.preventDefault(); decide(top, "maybe"); }
-      else if (e.key === " ") { e.preventDefault(); topRef.current?.nextPhoto(); }
-      else if (e.key === "Shift" || (e.shiftKey && e.key === "Space")) {
+      else if (e.key === " ") {
         e.preventDefault();
-        topRef.current?.prevPhoto();
+        e.stopPropagation();
+        topRef.current?.nextPhoto();
       }
+      else if (e.key === "ArrowDown") { e.preventDefault(); topRef.current?.prevPhoto(); }
       else if ((e.key === "z" || e.key === "Z") && (e.metaKey || e.ctrlKey)) { e.preventDefault(); undo(); }
       else if (e.key === "?" || e.key === "/") setShowHelp((s) => !s);
     }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    // Capture phase so we beat any focused button's default behavior.
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [top?.id, history.length]);
 
@@ -214,7 +221,8 @@ function HelpHint({ show, onClose }: { show: boolean; onClose: () => void }) {
         <Kbd>←</Kbd><span>Nope (or drag left)</span>
         <Kbd>→</Kbd><span>Yes (or drag right)</span>
         <Kbd>↑</Kbd><span>Maybe (or drag up)</span>
-        <Kbd>Space</Kbd><span>Next photo</span>
+        <Kbd>Space</Kbd><span>Next photo (or click photo)</span>
+        <Kbd>↓</Kbd><span>Previous photo</span>
         <Kbd>⌘Z</Kbd><span>Undo</span>
         <Kbd>?</Kbd><span>Toggle this help</span>
       </div>
@@ -279,13 +287,21 @@ const SwipeCard = forwardRef<CardHandle, {
     ref,
     () => ({
       swipe: async (direction) => {
-        const config = { duration: 0.32, ease: [0.32, 0.72, 0, 1] as const };
+        // Tinder-style flight: long travel, ease-out, slight lift on yes/no.
+        const ease = [0.22, 1, 0.36, 1] as const;
+        const duration = 0.42;
         if (direction === "yes") {
-          await animate(x, 900, config);
+          await Promise.all([
+            animate(x, 1200, { duration, ease }),
+            animate(y, -60, { duration, ease }),
+          ]);
         } else if (direction === "no") {
-          await animate(x, -900, config);
+          await Promise.all([
+            animate(x, -1200, { duration, ease }),
+            animate(y, -60, { duration, ease }),
+          ]);
         } else {
-          await animate(y, -900, config);
+          await animate(y, -1100, { duration: 0.45, ease });
         }
       },
       nextPhoto: () => setPhotoIdx((i) => (photos.length ? (i + 1) % photos.length : 0)),
@@ -336,25 +352,40 @@ const SwipeCard = forwardRef<CardHandle, {
         translateY: depth * 12,
         zIndex: 100 - depth,
       }}
-      initial={{ opacity: 0, scale: 0.92, y: 30 }}
+      initial={{ opacity: 0, scale: 0.88, y: 60 }}
       animate={{ opacity: 1, scale: 1 - depth * 0.04 }}
-      transition={{ type: "spring", stiffness: 320, damping: 28 }}
+      transition={{ type: "spring", stiffness: 340, damping: 30, mass: 0.9 }}
       exit={{
         opacity: 0,
-        scale: 0.9,
-        transition: { duration: 0.2 },
+        transition: { duration: 0.15, delay: 0.28 },
       }}
-      className="absolute inset-0 bg-white rounded-3xl border border-ink-100 overflow-hidden cursor-grab active:cursor-grabbing shadow-xl"
+      className="absolute inset-0 bg-white rounded-3xl border border-ink-100 overflow-hidden cursor-grab active:cursor-grabbing shadow-2xl"
     >
       <div className="grid grid-rows-[58%_42%] h-full">
-        {/* Photo area */}
-        <div className="relative bg-ink-100 overflow-hidden group">
+        {/* Photo area — tap left half to go back, right half to advance */}
+        <motion.div
+          className="relative bg-ink-100 overflow-hidden group"
+          onTap={(e, info) => {
+            if (!isTop || photos.length < 2) return;
+            // Ignore taps that came after a drag
+            const moved = Math.abs(x.get()) + Math.abs(y.get());
+            if (moved > 10) return;
+            const target = e.currentTarget as HTMLElement;
+            const rect = target.getBoundingClientRect();
+            const rel = info.point.x - rect.left;
+            if (rel < rect.width / 2) {
+              setPhotoIdx((i) => (i === 0 ? photos.length - 1 : i - 1));
+            } else {
+              setPhotoIdx((i) => (i + 1) % photos.length);
+            }
+          }}
+        >
           {currentPhoto ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={currentPhoto}
               alt={listing.title}
-              className="w-full h-full object-cover"
+              className="w-full h-full object-cover select-none"
               draggable={false}
             />
           ) : (
@@ -389,8 +420,8 @@ const SwipeCard = forwardRef<CardHandle, {
               >
                 <ChevronRight className="w-5 h-5" />
               </button>
-              <div className="absolute top-3 right-3 px-2 py-0.5 bg-black/40 backdrop-blur-sm rounded text-white text-[10px] font-medium opacity-0 group-hover:opacity-100 transition">
-                {photoIdx + 1}/{photos.length} · space
+              <div className="absolute top-3 right-3 px-2 py-0.5 bg-black/40 backdrop-blur-sm rounded text-white text-[10px] font-medium opacity-0 group-hover:opacity-100 transition pointer-events-none">
+                {photoIdx + 1}/{photos.length}
               </div>
             </>
           )}
@@ -432,7 +463,7 @@ const SwipeCard = forwardRef<CardHandle, {
               </div>
             )}
           </div>
-        </div>
+        </motion.div>
 
         {/* Details */}
         <div className="p-6 overflow-y-auto no-scrollbar">
@@ -522,7 +553,7 @@ function ActionBar({
         <motion.button
           whileHover={{ scale: 1.08 }}
           whileTap={{ scale: 0.95 }}
-          onClick={onUndo}
+          onClick={(e) => { (e.currentTarget as HTMLElement).blur(); onUndo(); }}
           title="Undo (⌘Z)"
           className="w-12 h-12 rounded-full bg-white border border-ink-100 text-ink-900/60 shadow-md hover:text-ink-900 flex items-center justify-center"
         >
@@ -534,7 +565,7 @@ function ActionBar({
         whileTap={{ scale: 0.92 }}
         onMouseEnter={() => onHover("no")}
         onMouseLeave={() => onHover(null)}
-        onClick={() => onDecide("no")}
+        onClick={(e) => { (e.currentTarget as HTMLElement).blur(); onDecide("no"); }}
         title="Not interested (←)"
         className={
           "w-16 h-16 rounded-full bg-white border-2 border-accent-no text-accent-no shadow-lg flex items-center justify-center transition " +
@@ -548,7 +579,7 @@ function ActionBar({
         whileTap={{ scale: 0.92 }}
         onMouseEnter={() => onHover("maybe")}
         onMouseLeave={() => onHover(null)}
-        onClick={() => onDecide("maybe")}
+        onClick={(e) => { (e.currentTarget as HTMLElement).blur(); onDecide("maybe"); }}
         title="Uncertain (↑)"
         className={
           "w-14 h-14 rounded-full bg-white border-2 border-accent-maybe text-amber-600 shadow-lg flex items-center justify-center transition " +
@@ -562,7 +593,7 @@ function ActionBar({
         whileTap={{ scale: 0.92 }}
         onMouseEnter={() => onHover("yes")}
         onMouseLeave={() => onHover(null)}
-        onClick={() => onDecide("yes")}
+        onClick={(e) => { (e.currentTarget as HTMLElement).blur(); onDecide("yes"); }}
         title="Like it (→)"
         className={
           "w-16 h-16 rounded-full bg-white border-2 border-accent-yes text-accent-yes shadow-lg flex items-center justify-center transition " +
