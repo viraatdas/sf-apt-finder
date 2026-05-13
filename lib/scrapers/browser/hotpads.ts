@@ -17,6 +17,18 @@ export const hotpads: BrowserScraper = {
       await page.evaluate(() => window.scrollBy(0, 1800));
       await page.waitForTimeout(700);
     }
+    // Scroll back up + scroll each tile into view to trigger lazy-loaded photos.
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(800);
+    await page.evaluate(async () => {
+      const tiles = Array.from(document.querySelectorAll<HTMLElement>("[data-renderstrat]"));
+      for (const t of tiles) {
+        t.scrollIntoView({ block: "center" });
+        await new Promise((r) => setTimeout(r, 250));
+      }
+      window.scrollTo(0, 0);
+    });
+    await page.waitForTimeout(1500);
 
     const items = await page.evaluate((maxPrice) => {
       const tiles = Array.from(
@@ -47,7 +59,11 @@ export const hotpads: BrowserScraper = {
         // Building name: usually after "$X | beds | units available"
         const name = lines.find((l) => l.length > 4 && !/^\$|^\d+\s*(bed|ba)|^Favorite|^Previous|^Next|^Contact|^Apt\b/i.test(l));
         const addr = lines.find((l) => /\b(st|ave|blvd|rd|dr|ct|pl|way|ter)\b/i.test(l) && /\d/.test(l));
-        const img = tile.querySelector("img")?.getAttribute("src") ?? null;
+        // Real listing photos are on img.zumpercdn.com (Zumper owns HotPads).
+        // Multiple imgs per tile: heart-svg, carousel arrows, then the photo.
+        const photoUrls = Array.from(tile.querySelectorAll("img"))
+          .map((i: any) => i.currentSrc || i.src)
+          .filter((s): s is string => typeof s === "string" && /img\.zumpercdn\.com|photos\.hotpads|images\.zumper/i.test(s));
         out.push({
           href: fullUrl,
           sourceId: href.replace(/^\//, "").split("/")[0],
@@ -57,7 +73,7 @@ export const hotpads: BrowserScraper = {
           bathrooms: baM ? parseFloat(baM[1]) : undefined,
           sqft: sqftM ? parseInt(sqftM[1].replace(/,/g, ""), 10) : undefined,
           addressLine: addr,
-          img: img && img.startsWith("http") ? img : null,
+          photoUrls: Array.from(new Set(photoUrls)).slice(0, 6),
         });
       }
       return out;
@@ -74,7 +90,7 @@ export const hotpads: BrowserScraper = {
       bathrooms: it.bathrooms,
       sqft: it.sqft,
       addressLine: it.addressLine,
-      photoUrls: it.img ? [it.img] : [],
+      photoUrls: it.photoUrls ?? [],
       scrapedAt: now,
     }));
   },

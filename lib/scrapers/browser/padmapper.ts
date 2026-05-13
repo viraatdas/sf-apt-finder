@@ -54,6 +54,16 @@ export const padmapper: BrowserScraper = {
       try {
         await page.goto(url, { waitUntil: "domcontentloaded", timeout: 25000 });
         await page.waitForTimeout(3500);
+        // Scroll each card into view to trigger lazy photo loading.
+        await page.evaluate(async () => {
+          const cards = Array.from(document.querySelectorAll("div.relative.inline-block.bg-gray-0"));
+          for (const c of cards) {
+            (c as HTMLElement).scrollIntoView({ block: "center" });
+            await new Promise((r) => setTimeout(r, 150));
+          }
+          window.scrollTo(0, 0);
+        });
+        await page.waitForTimeout(1200);
       } catch (err) {
         console.log(`[padmapper] ${hood} goto error`);
         continue;
@@ -102,7 +112,13 @@ export const padmapper: BrowserScraper = {
           const neighborhoodIn = segs
             .map((s) => s.match(/(?:· |\| )?([A-Z][\w\s\-']+?)(?: \| | San Francisco)/i))
             .find((m) => m)?.[1];
-          const img = c.querySelector("img")?.getAttribute("src") ?? null;
+          // Real photos live on img.zumpercdn.com — multiple <img> tags per card
+          // (the first one is usually a carousel arrow SVG). Find by domain.
+          const photos = Array.from(c.querySelectorAll("img"))
+            .map((i: any) => i.currentSrc || i.src)
+            .filter((s): s is string => typeof s === "string" && /img\.zumpercdn\.com/.test(s));
+          // Dedup and pick high-res variant from srcset if available
+          const photoUrls = Array.from(new Set(photos)).slice(0, 6);
 
           out.push({
             href: a.href,
@@ -114,7 +130,7 @@ export const padmapper: BrowserScraper = {
             sqft: sqftM ? parseInt(sqftM[1].replace(/,/g, ""), 10) : undefined,
             addressLine: addr,
             neighborhood: neighborhoodIn?.trim(),
-            img: img && img.startsWith("http") ? img : null,
+            photoUrls,
           });
         }
         return out;
@@ -145,7 +161,7 @@ export const padmapper: BrowserScraper = {
           bathrooms: r.bathrooms,
           sqft: r.sqft,
           addressLine: r.addressLine,
-          photoUrls: r.img ? [r.img] : [],
+          photoUrls: r.photoUrls ?? [],
           scrapedAt: now,
         });
       }
