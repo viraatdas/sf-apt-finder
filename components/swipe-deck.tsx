@@ -79,16 +79,17 @@ export function SwipeDeck({ initial }: { initial: Listing[] }) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       // Don't hijack typing in form fields.
-      const tgt = e.target as HTMLElement | null;
-      if (tgt && ["INPUT", "TEXTAREA"].includes(tgt.tagName)) return;
+      const active = document.activeElement as HTMLElement | null;
+      if (active && ["INPUT", "TEXTAREA"].includes(active.tagName)) return;
       if (!top) return;
-      // Always release any stuck button focus so subsequent keys reach us.
-      if (tgt instanceof HTMLButtonElement) tgt.blur();
+      // Release any focused button so its native space/enter activation
+      // doesn't fire after we handle the key.
+      if (active && active instanceof HTMLButtonElement) active.blur();
 
       if (e.key === "ArrowLeft") { e.preventDefault(); decide(top, "no"); }
       else if (e.key === "ArrowRight") { e.preventDefault(); decide(top, "yes"); }
       else if (e.key === "ArrowUp") { e.preventDefault(); decide(top, "maybe"); }
-      else if (e.key === " ") {
+      else if (e.key === " " || e.code === "Space") {
         e.preventDefault();
         e.stopPropagation();
         topRef.current?.nextPhoto();
@@ -97,7 +98,7 @@ export function SwipeDeck({ initial }: { initial: Listing[] }) {
       else if ((e.key === "z" || e.key === "Z") && (e.metaKey || e.ctrlKey)) { e.preventDefault(); undo(); }
       else if (e.key === "?" || e.key === "/") setShowHelp((s) => !s);
     }
-    // Capture phase so we beat any focused button's default behavior.
+    // Capture phase so we beat any focused button's default activation.
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -274,7 +275,8 @@ const SwipeCard = forwardRef<CardHandle, {
 ) {
   const x = useMotionValue(0);
   const y = useMotionValue(0);
-  const rotate = useTransform(x, [-400, 0, 400], [-22, 0, 22]);
+  // Wider rotation range so the imperative flight gets dramatic rotation at the extremes.
+  const rotate = useTransform(x, [-700, 0, 700], [-45, 0, 45]);
   const yesOpacity = useTransform(x, [40, 160], [0, 1]);
   const noOpacity = useTransform(x, [-160, -40], [1, 0]);
   const maybeOpacity = useTransform(y, [-160, -40], [1, 0]);
@@ -287,21 +289,24 @@ const SwipeCard = forwardRef<CardHandle, {
     ref,
     () => ({
       swipe: async (direction) => {
-        // Tinder-style flight: long travel, ease-out, slight lift on yes/no.
         const ease = [0.22, 1, 0.36, 1] as const;
-        const duration = 0.42;
         if (direction === "yes") {
+          // Dramatic: launch hard right, kick upward then arc down, big rotation.
+          // Multi-stage feels like throwing a card across the room.
           await Promise.all([
-            animate(x, 1200, { duration, ease }),
-            animate(y, -60, { duration, ease }),
+            animate(x, 1800, { duration: 0.55, ease }),
+            (async () => {
+              await animate(y, -180, { duration: 0.22, ease: [0.34, 0, 0.5, 1] as const });
+              await animate(y, 120, { duration: 0.33, ease: [0.5, 0, 0.7, 1] as const });
+            })(),
           ]);
         } else if (direction === "no") {
           await Promise.all([
-            animate(x, -1200, { duration, ease }),
-            animate(y, -60, { duration, ease }),
+            animate(x, -1400, { duration: 0.42, ease }),
+            animate(y, -80, { duration: 0.42, ease }),
           ]);
         } else {
-          await animate(y, -1100, { duration: 0.45, ease });
+          await animate(y, -1200, { duration: 0.45, ease });
         }
       },
       nextPhoto: () => setPhotoIdx((i) => (photos.length ? (i + 1) % photos.length : 0)),
@@ -357,7 +362,7 @@ const SwipeCard = forwardRef<CardHandle, {
       transition={{ type: "spring", stiffness: 340, damping: 30, mass: 0.9 }}
       exit={{
         opacity: 0,
-        transition: { duration: 0.15, delay: 0.28 },
+        transition: { duration: 0.15, delay: 0.42 },
       }}
       className="absolute inset-0 bg-white rounded-3xl border border-ink-100 overflow-hidden cursor-grab active:cursor-grabbing shadow-2xl"
     >
