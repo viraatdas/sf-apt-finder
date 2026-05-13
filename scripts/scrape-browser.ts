@@ -17,9 +17,11 @@ import { runBrowserScrapers, type BrowserScraper } from "../lib/scrapers/browser
 import { hotpads } from "../lib/scrapers/browser/hotpads";
 import { apartmentsCom } from "../lib/scrapers/browser/apartments-com";
 import { padmapper } from "../lib/scrapers/browser/padmapper";
+import { trulia } from "../lib/scrapers/browser/trulia";
+import { zillow } from "../lib/scrapers/browser/zillow";
 import { sendDailyDigest } from "../lib/email";
 
-const ALL: BrowserScraper[] = [hotpads, apartmentsCom, padmapper];
+const ALL: BrowserScraper[] = [zillow, trulia, hotpads, apartmentsCom, padmapper];
 
 async function main() {
   const url = process.env.DATABASE_URL;
@@ -33,7 +35,8 @@ async function main() {
     city: process.env.SEARCH_CITY ?? "san-francisco",
   };
 
-  const only = process.argv[2];
+  const args = process.argv.slice(2).filter((a) => !a.startsWith("--"));
+  const only = args[0];
   const scrapers = only ? ALL.filter((s) => s.source === only) : ALL;
   if (!scrapers.length) {
     console.error("No scrapers selected. Known sources:", ALL.map((s) => s.source).join(", "));
