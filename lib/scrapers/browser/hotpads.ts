@@ -80,7 +80,7 @@ export const hotpads: BrowserScraper = {
     }, ctx.maxPrice);
 
     const now = new Date().toISOString();
-    return items.map((it: any) => ({
+    const listings: RawListing[] = items.map((it: any) => ({
       source: "hotpads",
       sourceId: String(it.sourceId),
       url: it.href,
@@ -93,5 +93,57 @@ export const hotpads: BrowserScraper = {
       photoUrls: it.photoUrls ?? [],
       scrapedAt: now,
     }));
+
+    // Photo enrichment: HotPads doesn't load photos on the search page; they're
+    // pre-rendered in each detail page's HTML inside a hidden modal. Visit each
+    // detail page concurrently via the shared browser context (same cookies +
+    // session) and grep for photos.zillowstatic.com URLs.
+    await enrichHotpadsPhotos(page, listings);
+
+    return listings;
   },
 };
+
+const PHOTO_RX =
+  /https:\/\/photos\.zillowstatic\.com\/fp\/[A-Za-z0-9]+-(?:rentals_large_1200_1200|rentals_medium_500_500|cc_ft_1152|cc_ft_768)\.(?:webp|jpg|jpeg)/g;
+
+async function enrichHotpadsPhotos(page: Page, listings: RawListing[]): Promise<void> {
+  const need = listings.filter((l) => (l.photoUrls?.length ?? 0) === 0);
+  if (!need.length) return;
+  console.log(`[hotpads] enriching photos for ${need.length} listings...`);
+
+  const ctx = page.context();
+  const CONCURRENCY = 3;
+  // Spawn dedicated worker pages — each uses the same stealth context so
+  // headers/fingerprint pass the bot wall like the search page did.
+  const workers = await Promise.all(
+    Array.from({ length: Math.min(CONCURRENCY, need.length) }, () => ctx.newPage())
+  );
+
+  let idx = 0;
+  let success = 0;
+  await Promise.all(
+    workers.map(async (worker) => {
+      while (idx < need.length) {
+        const i = idx++;
+        const l = need[i];
+        try {
+          await worker.goto(l.url, { waitUntil: "domcontentloaded", timeout: 15000 });
+          // Photos render in HTML quickly — no need to wait for full networkidle.
+          await worker.waitForTimeout(800);
+          const html = await worker.content();
+          const matches = Array.from(html.matchAll(PHOTO_RX)).map((m) => m[0]);
+          const photoUrls = Array.from(new Set(matches)).slice(0, 8);
+          if (photoUrls.length) {
+            l.photoUrls = photoUrls;
+            success++;
+          }
+        } catch (err) {
+          // partial enrichment fine
+        }
+      }
+      await worker.close();
+    })
+  );
+  console.log(`[hotpads] photo enrichment: ${success}/${need.length} got photos`);
+}
