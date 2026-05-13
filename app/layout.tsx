@@ -2,9 +2,44 @@ import "./globals.css";
 import type { Metadata } from "next";
 import Link from "next/link";
 
+const SITE_URL = process.env.SITE_URL ?? "https://apt-tinder.viraat.dev";
+
 export const metadata: Metadata = {
-  title: "Apt Tinder — SF",
-  description: "Swipe through 3BR SF apartments under $9k",
+  title: {
+    default: "apt·tinder — swipe SF apartments",
+    template: "%s · apt·tinder",
+  },
+  description:
+    "Daily swipe-through of every 3BR San Francisco rental under $9k. Deduped across Zillow, Craigslist, Apartments.com, Trulia, Padmapper, and HotPads.",
+  metadataBase: new URL(SITE_URL),
+  applicationName: "apt-tinder",
+  keywords: [
+    "San Francisco apartments",
+    "SF rentals",
+    "3 bedroom",
+    "Zillow",
+    "Craigslist",
+    "apartment swipe",
+  ],
+  openGraph: {
+    title: "apt·tinder — swipe SF apartments",
+    description: "Every new 3BR SF rental under $9k, deduped daily from 5+ sources.",
+    url: SITE_URL,
+    siteName: "apt·tinder",
+    type: "website",
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "apt·tinder",
+    description: "Swipe through every new SF 3BR rental, daily.",
+  },
+  robots: { index: true, follow: true },
+};
+
+export const viewport = {
+  themeColor: "#ec4899",
+  colorScheme: "light" as const,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

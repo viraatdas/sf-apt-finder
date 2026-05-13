@@ -43,6 +43,12 @@ export const listings = pgTable(
     /** Set when we observe a listing missing from sources where it was previously seen. */
     unavailableAt: timestamp("unavailable_at", { withTimezone: true }),
     status: statusEnum("status").notNull().default("available"),
+    /** Contact info, when extractable from the listing description / detail page. */
+    contactPhone: text("contact_phone"),
+    contactEmail: text("contact_email"),
+    contactName: text("contact_name"),
+    /** Tracks whether we've already tried to extract contact info, so we don't re-LLM. */
+    contactExtractedAt: timestamp("contact_extracted_at", { withTimezone: true }),
     raw: jsonb("raw"),
   },
   (t) => ({

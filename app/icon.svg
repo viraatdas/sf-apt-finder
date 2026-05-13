@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ec4899"/>
+      <stop offset="1" stop-color="#0a0a0c"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#g)"/>
+  <!-- Stylized house with a heart roof -->
+  <path d="M32 14 L48 30 L48 50 L16 50 L16 30 Z"
+        fill="#fff" stroke="#fff" stroke-linejoin="round" stroke-width="2.5"/>
+  <path d="M32 28 c-3 -5 -10 -1 -7 5 c1.5 3 5 5 7 7 c2 -2 5.5 -4 7 -7 c3 -6 -4 -10 -7 -5 Z"
+        fill="#ec4899"/>
+</svg>

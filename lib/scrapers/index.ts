@@ -1,4 +1,5 @@
-import { sql, and, eq, lt } from "drizzle-orm";
+import { sql, and, eq, lt, isNull, inArray } from "drizzle-orm";
+import { extractContact } from "@/lib/contact";
 import { db, schema } from "@/lib/db";
 import { mergeRaw } from "@/lib/dedup";
 import { geocode } from "@/lib/geocode";
@@ -183,6 +184,34 @@ export async function runAllScrapers(ctx?: Partial<ScrapeContext>): Promise<Scra
         updatedCount++;
       }
     }
+  }
+
+  // Contact extraction for newly-inserted listings that have a description.
+  // Bounded so a heavy LLM run can't blow the function timeout.
+  const contactBudget = Number(process.env.CONTACT_EXTRACT_BUDGET ?? 15);
+  if (newListings.length > 0 && process.env.ANTHROPIC_API_KEY) {
+    const newIds = newListings.slice(0, contactBudget).map((l) => l.id);
+    const rows = await db
+      .select({ id: schema.listings.id, description: schema.listings.description })
+      .from(schema.listings)
+      .where(and(inArray(schema.listings.id, newIds), isNull(schema.listings.contactExtractedAt)));
+    let extracted = 0;
+    for (const row of rows) {
+      if (!row.description) continue;
+      const c = await extractContact(row.description);
+      const hasAny = !!(c.phone || c.email || c.name);
+      await db
+        .update(schema.listings)
+        .set({
+          contactPhone: c.phone ?? null,
+          contactEmail: c.email ?? null,
+          contactName: c.name ?? null,
+          contactExtractedAt: new Date(),
+        })
+        .where(eq(schema.listings.id, row.id));
+      if (hasAny) extracted++;
+    }
+    console.log(`contact extraction: ${extracted}/${rows.length} found contact info`);
   }
 
   // Availability sweep — only run if at least one reliable source succeeded,

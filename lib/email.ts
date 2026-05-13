@@ -23,6 +23,9 @@ interface Featured {
   bathrooms: number | null;
   sqft: number | null;
   addressLine: string | null;
+  contactPhone: string | null;
+  contactEmail: string | null;
+  contactName: string | null;
 }
 
 interface MoreItem {
@@ -145,6 +148,9 @@ function pickFeatured(rows: (typeof schema.listings.$inferSelect)[]): Featured[]
       bathrooms: r.bathrooms,
       sqft: r.sqft,
       addressLine: r.addressLine,
+      contactPhone: r.contactPhone,
+      contactEmail: r.contactEmail,
+      contactName: r.contactName,
     };
   });
 }
@@ -295,10 +301,25 @@ function renderFeatured(f: Featured): string {
           </div>
           <div style="font-size:13px;color:#444;line-height:1.4;margin-bottom:6px">${escape(f.title)}</div>
           ${f.addressLine ? `<div style="font-size:12px;color:#888;margin-bottom:6px">${escape(f.addressLine)}</div>` : ""}
-          ${specs.length ? `<div style="font-size:12px;color:#666;font-weight:600">${specs.join(" · ")}</div>` : ""}
+          ${specs.length ? `<div style="font-size:12px;color:#666;font-weight:600;margin-bottom:8px">${specs.join(" · ")}</div>` : ""}
+          ${renderContactInline(f)}
         </div>
       </div>
     </a>`;
+}
+
+function renderContactInline(f: Featured): string {
+  const bits: string[] = [];
+  if (f.contactName) bits.push(`<span style="color:#0a0a0c;font-weight:600">${escape(f.contactName)}</span>`);
+  if (f.contactPhone) {
+    const tel = f.contactPhone.replace(/\D/g, "");
+    bits.push(`<a href="tel:${tel}" style="color:#0a0a0c;text-decoration:none;font-family:ui-monospace,monospace">📞 ${escape(f.contactPhone)}</a>`);
+  }
+  if (f.contactEmail) {
+    bits.push(`<a href="mailto:${escape(f.contactEmail)}" style="color:#0a0a0c;text-decoration:none;font-family:ui-monospace,monospace">✉ ${escape(f.contactEmail)}</a>`);
+  }
+  if (!bits.length) return "";
+  return `<div style="margin-top:6px;padding:8px 10px;background:#f0fdfa;border:1px solid #99f6e4;border-radius:8px;font-size:12px;display:flex;flex-wrap:wrap;gap:8px;">${bits.join('<span style="color:#999">·</span>')}</div>`;
 }
 
 function renderRow(it: MoreItem, isLast: boolean): string {

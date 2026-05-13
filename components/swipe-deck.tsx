@@ -512,6 +512,37 @@ const SwipeCard = forwardRef<CardHandle, {
             </p>
           )}
 
+          {(listing.contactPhone || listing.contactEmail || listing.contactName) && (
+            <div className="mb-3 p-3 rounded-xl bg-accent-yes/10 border border-accent-yes/30">
+              <div className="text-[10px] uppercase tracking-wide text-accent-yes font-semibold mb-1.5">
+                Contact
+              </div>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-900">
+                {listing.contactName && (
+                  <span className="font-medium">{listing.contactName}</span>
+                )}
+                {listing.contactPhone && (
+                  <a
+                    href={`tel:${listing.contactPhone.replace(/\D/g, "")}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="font-mono text-ink-900 hover:underline"
+                  >
+                    📞 {listing.contactPhone}
+                  </a>
+                )}
+                {listing.contactEmail && (
+                  <a
+                    href={`mailto:${listing.contactEmail}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="font-mono text-ink-900 hover:underline truncate"
+                  >
+                    ✉ {listing.contactEmail}
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="flex gap-1.5 flex-wrap">
             {sources.map((s, i) => (
               <a
