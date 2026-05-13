@@ -18,22 +18,25 @@ interface ApifyActor {
 }
 
 const SF_SEARCH_URLS = {
-  /** Zillow requires the searchQueryState param to identify the filter set. */
+  /** Zillow requires searchQueryState with their SHORT filter keys (fr/fsba/beds/price)
+   * for rentals — not the long names. Long names silently return 0 results. */
   zillow: (beds: number, maxPrice: number) => {
     const state = {
       pagination: {},
       isMapVisible: true,
       mapBounds: { west: -122.515, east: -122.355, south: 37.705, north: 37.835 },
       filterState: {
-        isForRent: { value: true },
-        isForSaleByAgent: { value: false },
-        isForSaleByOwner: { value: false },
-        isNewConstruction: { value: false },
-        isComingSoon: { value: false },
-        isAuction: { value: false },
-        isForSaleForeclosure: { value: false },
+        fr: { value: true }, // for rent
+        fsba: { value: false },
+        fsbo: { value: false },
+        nc: { value: false },
+        cmsn: { value: false },
+        auc: { value: false },
+        fore: { value: false },
+        ah: { value: true }, // apartment / home
         beds: { min: beds },
-        monthlyPayment: { max: maxPrice },
+        price: { max: maxPrice }, // monthly rent
+        mp: { max: maxPrice },
       },
       isListVisible: true,
       mapZoom: 12,
@@ -58,6 +61,8 @@ const ACTORS: ApifyActor[] = [
       extractionMethod: "MAP_MARKERS",
     }),
     normalize: (r, ctx) => {
+      // Apify returns price as a string like "$7,098/mo" or "$4,300+/mo".
+      // For "$X+/mo" listings (building with price range starting at X), use X as the floor.
       const price =
         toMoney(r?.price) ||
         toMoney(r?.units?.[0]?.price) ||
@@ -69,20 +74,29 @@ const ACTORS: ApifyActor[] = [
         r?.detailUrl ? `https://www.zillow.com${r.detailUrl}` :
         r?.url ?? null;
       if (!url) return null;
+      // Photos: imgSrc is the hero; carouselPhotos array has more.
+      const photoUrls: string[] = [];
+      if (r?.imgSrc && typeof r.imgSrc === "string") photoUrls.push(r.imgSrc);
+      if (Array.isArray(r?.carouselPhotos)) {
+        for (const p of r.carouselPhotos) {
+          const u = p?.url ?? p?.src ?? p;
+          if (typeof u === "string" && u.startsWith("http")) photoUrls.push(u);
+        }
+      }
       return {
         source: "zillow",
         sourceId: String(r?.zpid ?? r?.id ?? url),
         url,
         title: r?.address ?? r?.statusText ?? "Zillow listing",
         price,
-        bedrooms: r?.beds ?? r?.hdpData?.homeInfo?.bedrooms,
-        bathrooms: r?.baths ?? r?.hdpData?.homeInfo?.bathrooms,
-        sqft: r?.area ?? r?.hdpData?.homeInfo?.livingArea,
+        bedrooms: typeof r?.beds === "number" ? r.beds : r?.hdpData?.homeInfo?.bedrooms,
+        bathrooms: typeof r?.baths === "number" ? r.baths : r?.hdpData?.homeInfo?.bathrooms,
+        sqft: typeof r?.area === "number" ? r.area : r?.hdpData?.homeInfo?.livingArea,
         addressLine: r?.address ?? r?.addressStreet,
         zip: r?.addressZipcode ?? r?.hdpData?.homeInfo?.zipcode,
         lat: r?.latLong?.latitude ?? r?.hdpData?.homeInfo?.latitude,
         lng: r?.latLong?.longitude ?? r?.hdpData?.homeInfo?.longitude,
-        photoUrls: r?.imgSrc ? [r.imgSrc] : r?.carouselPhotos?.map((p: any) => p.url) ?? [],
+        photoUrls: Array.from(new Set(photoUrls)).slice(0, 8),
         scrapedAt: new Date().toISOString(),
         raw: r,
       };

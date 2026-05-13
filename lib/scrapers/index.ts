@@ -13,10 +13,13 @@ import type { RawListing, Scraper, ScrapeContext, Source } from "./types";
 
 export const ALL_SCRAPERS: Scraper[] = [
   craigslist,
+  // Direct-HTTP zillow stays as a no-op (always 403 from cloud IPs).
+  // The real Zillow data comes from apifyScraper("zillow") below.
   zillow,
   redfin,
   realtor,
   zumper,
+  apifyScraper("zillow"),
   apifyScraper("apartments-com"),
   apifyScraper("trulia"),
   apifyScraper("padmapper"),
