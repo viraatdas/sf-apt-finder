@@ -2,6 +2,7 @@ import { Resend } from "resend";
 import { db, schema } from "@/lib/db";
 import { desc, inArray } from "drizzle-orm";
 import type { ScrapeResult } from "./scrapers";
+import { checkApifyBalance, type ApifyBalance } from "./apify-balance";
 
 const FROM = process.env.EMAIL_FROM ?? "SF Apt Finder <onboarding@resend.dev>";
 const TO = (process.env.EMAIL_TO ?? "viraat.laldas@gmail.com,sambruns2000@gmail.com")
@@ -63,9 +64,10 @@ export async function sendDailyDigest(result: ScrapeResult, siteUrl: string): Pr
 
   const featured = pickFeatured(fullRows);
   const more = pickMore(fullRows, featured);
+  const apifyBalance = await checkApifyBalance();
 
-  const html = renderHtml(result, featured, more, siteUrl);
-  const text = renderText(result, featured, more, siteUrl);
+  const html = renderHtml(result, featured, more, siteUrl, apifyBalance);
+  const text = renderText(result, featured, more, siteUrl, apifyBalance);
 
   const { data, error } = await resend.emails.send({
     from: FROM,
@@ -185,9 +187,13 @@ function renderText(
   result: ScrapeResult,
   featured: Featured[],
   more: MoreItem[],
-  siteUrl: string
+  siteUrl: string,
+  apify: ApifyBalance | null
 ): string {
   const lines: string[] = [];
+  if (apify && apify.status !== "ok") {
+    lines.push(`⚠️ APIFY ${apify.status.toUpperCase()}: $${apify.usedUsd.toFixed(2)} of $${apify.capUsd.toFixed(0)} used (${apify.percentage.toFixed(0)}%). Zillow scraping ${apify.status === "exhausted" ? "STOPPED" : "may stop soon"}. Top up at https://console.apify.com/billing\n`);
+  }
   lines.push(`🏠 ${result.newCount} new SF apartments today`);
   lines.push(`→ ${siteUrl}\n`);
   if (featured.length) {
@@ -213,8 +219,10 @@ function renderHtml(
   result: ScrapeResult,
   featured: Featured[],
   more: MoreItem[],
-  siteUrl: string
+  siteUrl: string,
+  apify: ApifyBalance | null
 ): string {
+  const apifyBanner = renderApifyBanner(apify);
   const featuredHtml = featured.length
     ? featured.map((f) => renderFeatured(f)).join("")
     : "";
@@ -231,7 +239,7 @@ function renderHtml(
   return `<!doctype html>
   <html><body style="background:#f5f5f4;margin:0;padding:24px;color:#0a0a0c;font-family:-apple-system,BlinkMacSystemFont,sans-serif">
     <div style="max-width:680px;margin:0 auto">
-
+      ${apifyBanner}
       <!-- HERO: count + big CTA -->
       <div style="background:#0a0a0c;color:#fff;border-radius:24px;padding:32px;margin-bottom:20px">
         <div style="font:600 12px ui-monospace,monospace;letter-spacing:0.12em;text-transform:uppercase;color:#888;margin-bottom:8px">
@@ -346,6 +354,54 @@ function renderRow(it: MoreItem, isLast: boolean): string {
         </a>
       </td>
     </tr>`;
+}
+
+function renderApifyBanner(apify: ApifyBalance | null): string {
+  if (!apify || apify.status === "ok") return "";
+
+  const styles: Record<string, { bg: string; border: string; fg: string; emoji: string; title: string; body: string }> = {
+    warning: {
+      bg: "#fef3c7",
+      border: "#f59e0b",
+      fg: "#78350f",
+      emoji: "⚠️",
+      title: "Apify credit running low",
+      body: `You've used $${apify.usedUsd.toFixed(2)} of $${apify.capUsd.toFixed(0)} (${apify.percentage.toFixed(0)}%) this month. Zillow scraping uses Apify — if you hit the cap, today's Zillow listings may stop refreshing.`,
+    },
+    critical: {
+      bg: "#fee2e2",
+      border: "#ef4444",
+      fg: "#7f1d1d",
+      emoji: "🚨",
+      title: "Apify credit almost gone",
+      body: `Used $${apify.usedUsd.toFixed(2)} of $${apify.capUsd.toFixed(0)} (${apify.percentage.toFixed(0)}%). Zillow will stop scraping at $${apify.capUsd.toFixed(0)}. Only $${apify.remainingUsd.toFixed(2)} remaining.`,
+    },
+    exhausted: {
+      bg: "#1f2937",
+      border: "#dc2626",
+      fg: "#fecaca",
+      emoji: "🛑",
+      title: "Apify cap hit — Zillow paused",
+      body: `Used $${apify.usedUsd.toFixed(2)} of $${apify.capUsd.toFixed(0)}. Zillow scraping has stopped. Add credit or raise your spending limit to resume.`,
+    },
+    unknown: { bg: "", border: "", fg: "", emoji: "", title: "", body: "" },
+  };
+  const s = styles[apify.status];
+  if (!s.title) return "";
+
+  return `
+  <div style="background:${s.bg};border:1px solid ${s.border};border-left:6px solid ${s.border};border-radius:14px;padding:16px 18px;margin-bottom:16px;color:${s.fg}">
+    <div style="font:700 14px -apple-system,sans-serif;margin-bottom:4px">
+      ${s.emoji} ${escape(s.title)}
+    </div>
+    <div style="font:13px -apple-system,sans-serif;line-height:1.5;margin-bottom:8px">
+      ${escape(s.body)}
+    </div>
+    <a href="https://console.apify.com/billing"
+       style="display:inline-block;background:${s.fg};color:${s.bg};padding:7px 14px;border-radius:999px;text-decoration:none;font-weight:700;font-size:12px">
+      Top up Apify →
+    </a>
+  </div>`;
 }
 
 function todayLabel(): string {
