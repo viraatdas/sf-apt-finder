@@ -51,7 +51,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Link href="/" className="font-display text-xl tracking-tight">
               apt<span className="text-accent-yes">·</span>tinder
             </Link>
-            <nav className="flex gap-1 text-sm">
+            <nav className="flex gap-1 text-sm items-center">
               <Link href="/" className="px-3 py-1.5 rounded-full hover:bg-ink-100">
                 Swipe
               </Link>
@@ -61,10 +61,27 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/liked" className="px-3 py-1.5 rounded-full hover:bg-ink-100">
                 Shortlist
               </Link>
+              <a
+                href="mailto:viraat@exla.ai?subject=apt-tinder"
+                className="ml-2 px-3 py-1.5 rounded-full bg-accent-yes/10 text-accent-yes hover:bg-accent-yes/20 font-medium"
+              >
+                Interested? viraat@exla.ai
+              </a>
             </nav>
           </div>
         </header>
         <main>{children}</main>
+        <footer className="border-t border-ink-100 mt-12 py-6 text-center text-sm text-ink-900/60">
+          <p>
+            Like what you see? Want to collab on a place?{" "}
+            <a
+              href="mailto:viraat@exla.ai?subject=apt-tinder"
+              className="text-accent-yes font-medium hover:underline"
+            >
+              viraat@exla.ai
+            </a>
+          </p>
+        </footer>
       </body>
     </html>
   );

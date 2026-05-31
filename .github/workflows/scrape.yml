@@ -1,9 +1,7 @@
 name: Browser scrape (daily)
 
 on:
-  schedule:
-    # 14:10 UTC = 7:10 AM PDT (5 min after Vercel cron so Craigslist lands first)
-    - cron: "10 14 * * *"
+  # Schedule disabled — project paused. Manual trigger still available.
   workflow_dispatch:
     inputs:
       send_email:
