@@ -115,21 +115,24 @@ export function mergeRaw(raws: RawListing[], city: CityId = DEFAULT_CITY): Merge
     const sources: MergedListing["sources"] = [];
     const photos = new Set<string>();
     for (const g of group) {
-      pricesBySource[g.source] = g.price;
+      const price = intOrUndefined(g.price, { min: 1 });
+      if (price != null) pricesBySource[g.source] = price;
       sources.push({ source: g.source, url: g.url, sourceId: g.sourceId, scrapedAt: g.scrapedAt });
       for (const p of g.photoUrls ?? []) photos.add(p);
     }
+    const prices = Object.values(pricesBySource);
+    if (prices.length === 0) continue;
     out.push({
       id,
       title: best.title,
       addressLine: best.addressLine,
       zip: best.zip,
-      lat: best.lat,
-      lng: best.lng,
-      bedrooms: intOrUndefined(best.bedrooms),
-      bathrooms: best.bathrooms,
-      sqft: intOrUndefined(best.sqft),
-      price: Math.min(...Object.values(pricesBySource)),
+      lat: boundedNumber(best.lat, -90, 90),
+      lng: boundedNumber(best.lng, -180, 180),
+      bedrooms: intOrUndefined(best.bedrooms, { min: 0, max: 20 }),
+      bathrooms: boundedNumber(best.bathrooms, 0, 20),
+      sqft: intOrUndefined(best.sqft, { min: 50, max: 100_000 }),
+      price: Math.min(...prices),
       pricesBySource,
       description: best.description,
       photoUrls: Array.from(photos),
@@ -150,9 +153,26 @@ function pickBest(group: RawListing[]): RawListing {
     .sort((a, b) => b.score - a.score)[0]!.r;
 }
 
-function intOrUndefined(value: number | undefined): number | undefined {
+function intOrUndefined(
+  value: number | undefined,
+  bounds: { min?: number; max?: number } = {}
+): number | undefined {
   if (value == null || !Number.isFinite(value)) return undefined;
-  return Number.isInteger(value) ? value : undefined;
+  if (!Number.isInteger(value)) return undefined;
+  const min = bounds.min ?? -2_147_483_648;
+  const max = bounds.max ?? 2_147_483_647;
+  if (value < min || value > max) return undefined;
+  return value;
+}
+
+function boundedNumber(
+  value: number | undefined,
+  min: number,
+  max: number
+): number | undefined {
+  if (value == null || !Number.isFinite(value)) return undefined;
+  if (value < min || value > max) return undefined;
+  return value;
 }
 
 function completeness(r: RawListing): number {
