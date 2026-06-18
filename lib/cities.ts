@@ -62,7 +62,7 @@ export const CITIES: Record<
     geocodeSuffix: "Vancouver, BC, Canada",
     defaultMaxPrice: 4000,
     defaultBedrooms: null,
-    recipients: ["viraat@exla.ai", "maanasa.koripalli@gmail.com", "krithik2000@gmail.com"],
+    recipients: ["viraat@exla.ai"],
     sources: [
       "craigslist",
       "kijiji",

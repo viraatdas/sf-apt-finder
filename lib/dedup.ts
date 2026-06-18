@@ -126,9 +126,9 @@ export function mergeRaw(raws: RawListing[], city: CityId = DEFAULT_CITY): Merge
       zip: best.zip,
       lat: best.lat,
       lng: best.lng,
-      bedrooms: best.bedrooms,
+      bedrooms: intOrUndefined(best.bedrooms),
       bathrooms: best.bathrooms,
-      sqft: best.sqft,
+      sqft: intOrUndefined(best.sqft),
       price: Math.min(...Object.values(pricesBySource)),
       pricesBySource,
       description: best.description,
@@ -148,6 +148,11 @@ function pickBest(group: RawListing[]): RawListing {
   return group
     .map((r) => ({ r, score: completeness(r) }))
     .sort((a, b) => b.score - a.score)[0]!.r;
+}
+
+function intOrUndefined(value: number | undefined): number | undefined {
+  if (value == null || !Number.isFinite(value)) return undefined;
+  return Number.isInteger(value) ? value : undefined;
 }
 
 function completeness(r: RawListing): number {
