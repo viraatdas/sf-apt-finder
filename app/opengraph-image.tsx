@@ -83,7 +83,7 @@ export default async function Image() {
             fontFamily: "ui-sans-serif, system-ui, -apple-system, sans-serif",
           }}
         >
-          Craigslist · Kijiji · PadMapper · Zumper · liv.rent · rentals.ca — deduped daily
+          Craigslist · Kijiji · PadMapper · Zumper · liv.rent · rentals.ca · Facebook Marketplace
         </div>
       </div>
     ),

@@ -7,7 +7,7 @@ import type { RawListing, Scraper, ScrapeContext, Source } from "./types";
  * Apify; we get back whatever the actor finished within that window.
  */
 
-const APIFY_TIMEOUT_SECONDS = 40;
+const APIFY_TIMEOUT_SECONDS = 120;
 const APIFY_MEMORY_MB = 512;
 
 interface ApifyActor {
@@ -16,6 +16,15 @@ interface ApifyActor {
   buildInput: (ctx: ScrapeContext) => Record<string, unknown>;
   normalize: (row: any, ctx: ScrapeContext) => RawListing | null;
 }
+
+type NormalizedFloorplan = {
+  raw: any;
+  price: number;
+  bedrooms?: number;
+  bathrooms?: number;
+  sqft?: number;
+  title?: string;
+};
 
 const SEARCH_URLS = {
   /** Zillow requires searchQueryState with their SHORT filter keys (fr/fsba/beds/price)
@@ -51,8 +60,8 @@ const SEARCH_URLS = {
       : "",
   padmapper: (city: ScrapeContext["city"]) =>
     city === "vancouver"
-      ? "https://www.padmapper.com/apartments/vancouver-bc"
-      : "https://www.padmapper.com/apartments/san-francisco-ca",
+      ? "https://www.padmapper.com/apartments/vancouver-bc?box=-123.2247,49.198,-123.023,49.316"
+      : "https://www.padmapper.com/apartments/san-francisco-ca?box=-122.515,37.705,-122.355,37.835",
   facebook: (city: ScrapeContext["city"], beds: number | null, maxPrice: number) => {
     const market = city === "vancouver" ? "vancouver" : "sanfrancisco";
     const bedsParam = beds == null ? "" : `&minBedrooms=${beds}`;
@@ -63,6 +72,24 @@ const SEARCH_URLS = {
 const LOCATION_BY_CITY = {
   "san-francisco": "San Francisco, CA",
   vancouver: "Vancouver, BC",
+} as const;
+
+const FACEBOOK_CITY_SLUG_BY_CITY = {
+  "san-francisco": "sanfrancisco",
+  vancouver: "vancouver",
+} as const;
+
+const APIFY_PROXY_BY_CITY = {
+  "san-francisco": {
+    useApifyProxy: true,
+    apifyProxyGroups: ["RESIDENTIAL"],
+    apifyProxyCountry: "US",
+  },
+  vancouver: {
+    useApifyProxy: true,
+    apifyProxyGroups: ["RESIDENTIAL"],
+    apifyProxyCountry: "CA",
+  },
 } as const;
 
 const ACTORS: ApifyActor[] = [
@@ -132,10 +159,11 @@ const ACTORS: ApifyActor[] = [
     actorId: "lexis-solutions~padmapper-scraper",
     buildInput: (ctx) => ({
       startUrls: [{ url: SEARCH_URLS.padmapper(ctx.city) }],
-      maxItems: 30,
-      maxChargedResults: 30,
+      maxItems: 5,
+      maxChargedResults: 5,
+      proxyConfiguration: APIFY_PROXY_BY_CITY[ctx.city],
     }),
-    normalize: (r, ctx) => genericNormalize(r, "padmapper", ctx),
+    normalize: (r, ctx) => padmapperNormalize(r, ctx),
   },
   // HotPads — pay-per-result
   {
@@ -169,8 +197,23 @@ const ACTORS: ApifyActor[] = [
     }),
     normalize: (r, ctx) => genericNormalize(r, "zumper", ctx),
   },
-  // Facebook Marketplace: official actor requires paid Apify plan (402 on FREE).
-  // To enable: upgrade Apify, then re-add an entry here pointing to the apify~facebook-marketplace-scraper.
+  // Facebook Marketplace — pay-per-event. Keep maxItems small; this is best-effort.
+  {
+    source: "facebook",
+    actorId: "parseforge~facebook-marketplace-scraper",
+    buildInput: (ctx) => ({
+      searchQueries: [
+        {
+          city: FACEBOOK_CITY_SLUG_BY_CITY[ctx.city],
+          query: "apartment for rent",
+        },
+      ],
+      maxItems: 25,
+      enrichListings: false,
+      proxyConfiguration: APIFY_PROXY_BY_CITY[ctx.city],
+    }),
+    normalize: (r, ctx) => facebookNormalize(r, ctx),
+  },
 ];
 
 function toMoney(v: unknown): number {
@@ -211,6 +254,89 @@ function genericNormalize(r: any, source: Source, ctx: ScrapeContext): RawListin
   };
 }
 
+function padmapperNormalize(r: any, ctx: ScrapeContext): RawListing | null {
+  const floorplans = Array.isArray(r?.floorplans) ? r.floorplans : [];
+  const matchingFloorplans = floorplans
+    .map((floorplan: any): NormalizedFloorplan => ({
+      raw: floorplan,
+      price: toMoney(floorplan?.price),
+      bedrooms: numOr(floorplan?.bedrooms, floorplan?.beds),
+      bathrooms: numOr(floorplan?.bathrooms, floorplan?.baths),
+      sqft: numOr(floorplan?.squareFeet, floorplan?.sqft, floorplan?.size),
+      title: typeof floorplan?.title === "string" ? floorplan.title : undefined,
+    }))
+    .filter((floorplan: NormalizedFloorplan) => {
+      if (!floorplan.price || floorplan.price > ctx.maxPrice) return false;
+      if (ctx.bedrooms != null && floorplan.bedrooms != null && floorplan.bedrooms < ctx.bedrooms) {
+        return false;
+      }
+      if (ctx.bedrooms != null && floorplan.bedrooms != null && floorplan.bedrooms > ctx.bedrooms + 2) {
+        return false;
+      }
+      return true;
+    })
+    .sort((a: NormalizedFloorplan, b: NormalizedFloorplan) => a.price - b.price);
+
+  const floorplan = matchingFloorplans[0];
+  const price =
+    floorplan?.price ||
+    toMoney(r?.price) ||
+    toMoney(r?.rent) ||
+    toMoney(r?.minPrice) ||
+    toMoney(r?.priceRange?.min);
+  if (!price || price > ctx.maxPrice) return null;
+
+  const url = r?.url ?? r?.detailUrl ?? r?.link ?? r?.listingUrl;
+  if (!url) return null;
+  const title = [r?.name ?? r?.title ?? r?.address, floorplan?.title].filter(Boolean).join(" - ");
+  return {
+    source: "padmapper",
+    sourceId: String(r?.listingId ?? floorplan?.raw?.listingId ?? r?.buildingId ?? url),
+    url,
+    title: title || "PadMapper listing",
+    price,
+    bedrooms: floorplan?.bedrooms ?? numOr(r?.bedrooms, r?.beds, r?.bedroomCount),
+    bathrooms: floorplan?.bathrooms ?? numOr(r?.bathrooms, r?.baths, r?.bathroomCount),
+    sqft: floorplan?.sqft ?? numOr(r?.sqft, r?.squareFeet, r?.size),
+    addressLine: r?.formattedAddress ?? r?.address ?? r?.location?.address ?? r?.fullAddress,
+    zip: r?.zipcode ?? r?.zip ?? r?.postalCode,
+    lat: numOr(r?.lat, r?.latitude, r?.location?.lat, r?.coordinates?.lat),
+    lng: numOr(r?.lng, r?.lon, r?.longitude, r?.location?.lng, r?.coordinates?.lng),
+    photoUrls: pickPhotos(r),
+    description: Array.isArray(r?.amenities) ? r.amenities.join(", ") : r?.description,
+    scrapedAt: new Date().toISOString(),
+    raw: r,
+  };
+}
+
+function facebookNormalize(r: any, ctx: ScrapeContext): RawListing | null {
+  if (r?.listingType && !["rental", "home-for-sale"].includes(r.listingType)) return null;
+  const price = toMoney(r?.price ?? r?.priceText ?? r?.amount);
+  if (!price || price > ctx.maxPrice) return null;
+  const url = r?.url ?? r?.listingUrl;
+  if (!url) return null;
+  const bedrooms = numOr(r?.bedrooms, r?.beds, r?.bedroomCount);
+  if (ctx.bedrooms != null && bedrooms != null && bedrooms < ctx.bedrooms) return null;
+  if (ctx.bedrooms != null && bedrooms != null && bedrooms > ctx.bedrooms + 2) return null;
+  return {
+    source: "facebook",
+    sourceId: String(r?.listingId ?? r?.id ?? url),
+    url,
+    title: r?.title ?? r?.name ?? "Facebook Marketplace rental",
+    price,
+    bedrooms,
+    bathrooms: numOr(r?.bathrooms, r?.baths, r?.bathroomCount),
+    sqft: numOr(r?.sqft, r?.squareFeet, r?.size),
+    addressLine: r?.address ?? r?.locationText ?? r?.location,
+    lat: numOr(r?.lat, r?.latitude, r?.location?.lat, r?.coordinates?.lat),
+    lng: numOr(r?.lng, r?.lon, r?.longitude, r?.location?.lng, r?.coordinates?.lng),
+    photoUrls: pickPhotos(r),
+    description: r?.description,
+    scrapedAt: new Date().toISOString(),
+    raw: r,
+  };
+}
+
 function numOr(...vals: unknown[]): number | undefined {
   for (const v of vals) {
     if (typeof v === "number" && Number.isFinite(v)) return v;
@@ -224,7 +350,14 @@ function numOr(...vals: unknown[]): number | undefined {
 
 function pickPhotos(r: any): string[] {
   const candidates =
-    r?.images ?? r?.photos ?? r?.photoUrls ?? r?.imageUrls ?? r?.imageUrl ?? r?.image;
+    r?.images ??
+    r?.photos ??
+    r?.photoUrls ??
+    r?.imageUrls ??
+    r?.media ??
+    r?.mediaUrls ??
+    r?.imageUrl ??
+    r?.image;
   if (typeof candidates === "string") return [candidates];
   if (Array.isArray(candidates)) {
     return candidates

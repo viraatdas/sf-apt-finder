@@ -37,11 +37,15 @@ const SF_NEIGHBORHOODS = [
   "bernal-heights",
 ];
 
+const CITY_SLUGS = {
+  "san-francisco": "san-francisco-ca",
+  vancouver: "vancouver-bc",
+} as const;
+
 export const padmapper: BrowserScraper = {
   source: "padmapper",
   async scrape(ctx: ScrapeContext, page: Page): Promise<RawListing[]> {
-    if (ctx.city !== "san-francisco" || ctx.bedrooms == null) return [];
-    const targetBeds = ctx.bedrooms;
+    const citySlug = CITY_SLUGS[ctx.city];
     const all: RawListing[] = [];
     const seen = new Set<string>();
     const now = new Date().toISOString();
@@ -49,10 +53,17 @@ export const padmapper: BrowserScraper = {
     // Cap to ~8 neighborhoods to stay within reasonable runtime (~80s).
     // Iterate through them; later add more by setting PM_NEIGHBORHOODS env.
     // Cover most of SF — ~15 neighborhoods runs in ~60s. Override with PM_NEIGHBORHOODS env.
-    const list = (process.env.PM_NEIGHBORHOODS ?? SF_NEIGHBORHOODS.slice(0, 15).join(",")).split(",");
+    const defaultPaths =
+      ctx.city === "san-francisco" ? SF_NEIGHBORHOODS.slice(0, 15).join(",") : citySlug;
+    const list = (process.env.PM_NEIGHBORHOODS ?? defaultPaths).split(",");
 
-    for (const hood of list) {
-      const url = `https://www.padmapper.com/apartments/san-francisco-ca/${hood}`;
+    for (const rawPath of list) {
+      const path = rawPath.trim();
+      if (!path) continue;
+      const url =
+        path === citySlug
+          ? `https://www.padmapper.com/apartments/${citySlug}`
+          : `https://www.padmapper.com/apartments/${citySlug}/${path}`;
       try {
         await page.goto(url, { waitUntil: "domcontentloaded", timeout: 25000 });
         await page.waitForTimeout(3500);
@@ -67,7 +78,7 @@ export const padmapper: BrowserScraper = {
         });
         await page.waitForTimeout(1200);
       } catch (err) {
-        console.log(`[padmapper] ${hood} goto error`);
+        console.log(`[padmapper] ${path} goto error`);
         continue;
       }
 
@@ -112,7 +123,7 @@ export const padmapper: BrowserScraper = {
             /^\d+\s+\w/.test(s) && /\b(st|ave|blvd|rd|dr|ct|pl|way|ter|street|avenue|boulevard|drive)\b/i.test(s)
           );
           const neighborhoodIn = segs
-            .map((s) => s.match(/(?:· |\| )?([A-Z][\w\s\-']+?)(?: \| | San Francisco)/i))
+            .map((s) => s.match(/(?:· |\| )?([A-Z][\w\s\-']+?)(?: \| | San Francisco| Vancouver)/i))
             .find((m) => m)?.[1];
           // Real photos live on img.zumpercdn.com — multiple <img> tags per card
           // (the first one is usually a carousel arrow SVG). Find by domain.
@@ -138,16 +149,26 @@ export const padmapper: BrowserScraper = {
         return out;
       });
 
-      console.log(`[padmapper] ${hood}: ${rows.length} cards (${rows.filter((r) => (r.bedrooms ?? 0) >= targetBeds || (r.bedrooms_max ?? 0) >= targetBeds).length} match beds)`);
+      const bedMatches =
+        ctx.bedrooms == null
+          ? rows.length
+          : rows.filter(
+              (r) =>
+                (r.bedrooms ?? 0) >= ctx.bedrooms! ||
+                (r.bedrooms_max ?? 0) >= ctx.bedrooms!
+            ).length;
+      console.log(`[padmapper] ${path}: ${rows.length} cards (${bedMatches} match beds)`);
 
       for (const r of rows) {
         if (seen.has(r.href)) continue;
         // Filter: needs to match desired bed count (single OR within range)
         const minB = r.bedrooms ?? 0;
         const maxB = r.bedrooms_max ?? minB;
-        if (maxB < targetBeds) continue;
+        if (ctx.bedrooms != null && maxB < ctx.bedrooms) continue;
         // Skip range listings where 3BR is above the high-end of the range
-        if (r.bedrooms_max != null && r.bedrooms_max < targetBeds) continue;
+        if (ctx.bedrooms != null && r.bedrooms_max != null && r.bedrooms_max < ctx.bedrooms) {
+          continue;
+        }
         if (r.price > ctx.maxPrice) continue;
         seen.add(r.href);
         const slugId = r.href.match(/\/(?:rentals|buildings)\/([^/]+)/)?.[1] ?? r.href;

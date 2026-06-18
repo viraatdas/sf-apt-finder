@@ -11,20 +11,28 @@ export const metadata: Metadata = {
     default: "apt·tinder — swipe apartments",
     template: "%s · apt·tinder",
   },
-  description: "Daily swipe-through of apartment rentals, deduped across listing sources.",
+  description:
+    "Daily swipe-through of apartment rentals from Craigslist, Kijiji, PadMapper, Zumper, liv.rent, rentals.ca, and Facebook Marketplace.",
   metadataBase: new URL(SITE_URL),
   applicationName: "apt-tinder",
   keywords: [
     "apartments",
     "rentals",
     "Craigslist",
+    "Kijiji",
+    "PadMapper",
+    "Zumper",
+    "liv.rent",
+    "rentals.ca",
+    "Facebook Marketplace",
     "Vancouver rentals",
     "San Francisco rentals",
     "apartment swipe",
   ],
   openGraph: {
     title: "apt·tinder — swipe apartments",
-    description: "Daily rental listings deduped across listing sources.",
+    description:
+      "Daily rental listings from Craigslist, Kijiji, PadMapper, Zumper, liv.rent, rentals.ca, and Facebook Marketplace.",
     url: SITE_URL,
     siteName: "apt·tinder",
     type: "website",
@@ -33,7 +41,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "apt·tinder",
-    description: "Swipe through new apartment rentals, daily.",
+    description: "Swipe through rentals from Craigslist, Kijiji, PadMapper, Zumper, liv.rent, rentals.ca, and Facebook Marketplace.",
   },
   robots: { index: true, follow: true },
 };

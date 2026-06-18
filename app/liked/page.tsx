@@ -2,7 +2,9 @@ import { and, desc, eq, lte } from "drizzle-orm";
 import Link from "next/link";
 import { Bed, Bath, Maximize2, MapPin, ExternalLink } from "lucide-react";
 import { cityFromParam, maxPriceFromParam, type CityId } from "@/lib/cities";
+import { SourceStrip } from "@/components/source-strip";
 import { db, schema } from "@/lib/db";
+import { sourceLabel } from "@/lib/sources";
 import { formatMoney } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -51,38 +53,41 @@ export default async function LikedPage({ searchParams }: PageProps) {
   };
 
   return (
-    <div className="max-w-[1900px] mx-auto p-4 lg:p-8">
-      <h1 className="font-display text-3xl mb-2">Shortlist</h1>
-      <p className="text-sm text-ink-900/60 mb-8">
-        {groups.yes.length} loved · {groups.maybe.length} maybe · {groups.no.length} passed
-      </p>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Column
-          title="Loved"
-          emoji="❤️"
-          rows={groups.yes}
-          city={city}
-          color="text-accent-yes"
-          accent="border-accent-yes/50"
-        />
-        <Column
-          title="Maybe"
-          emoji="🤔"
-          rows={groups.maybe}
-          city={city}
-          color="text-amber-600"
-          accent="border-accent-maybe/50"
-        />
-        <Column
-          title="Passed"
-          emoji="🚫"
-          rows={groups.no}
-          city={city}
-          color="text-accent-no"
-          accent="border-accent-no/30"
-        />
+    <>
+      <SourceStrip city={city} className="pt-4" />
+      <div className="max-w-[1900px] mx-auto p-4 lg:p-8">
+        <h1 className="font-display text-3xl mb-2">Shortlist</h1>
+        <p className="text-sm text-ink-900/60 mb-8">
+          {groups.yes.length} loved · {groups.maybe.length} maybe · {groups.no.length} passed
+        </p>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <Column
+            title="Loved"
+            emoji="❤️"
+            rows={groups.yes}
+            city={city}
+            color="text-accent-yes"
+            accent="border-accent-yes/50"
+          />
+          <Column
+            title="Maybe"
+            emoji="🤔"
+            rows={groups.maybe}
+            city={city}
+            color="text-amber-600"
+            accent="border-accent-maybe/50"
+          />
+          <Column
+            title="Passed"
+            emoji="🚫"
+            rows={groups.no}
+            city={city}
+            color="text-accent-no"
+            accent="border-accent-no/30"
+          />
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -202,7 +207,7 @@ function ListingCard({ row, accent, city }: { row: Row; accent: string; city: Ci
             target="_blank"
             className="text-xs px-3 py-1.5 bg-ink-900 text-white rounded-full inline-flex items-center gap-1.5 hover:bg-ink-900/85"
           >
-            View on {sources[0]?.source} <ExternalLink className="w-3 h-3" />
+            View on {sourceLabel(sources[0]?.source)} <ExternalLink className="w-3 h-3" />
           </Link>
         )}
       </div>

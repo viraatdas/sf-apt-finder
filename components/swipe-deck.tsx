@@ -24,6 +24,7 @@ import {
 import { formatMoney } from "@/lib/utils";
 import type { Listing } from "@/lib/db/schema";
 import type { CityId } from "@/lib/cities";
+import { sourceLabel } from "@/lib/sources";
 
 const ListingMap = dynamic(() => import("./listing-map").then((m) => m.ListingMap), {
   ssr: false,
@@ -556,7 +557,7 @@ const SwipeCard = forwardRef<CardHandle, {
                 onClick={(e) => e.stopPropagation()}
                 className="text-xs px-2.5 py-1 bg-ink-100 hover:bg-ink-100/70 rounded-full inline-flex items-center gap-1"
               >
-                {s.source}
+                {sourceLabel(s.source)}
                 <ExternalLink className="w-3 h-3" />
               </a>
             ))}

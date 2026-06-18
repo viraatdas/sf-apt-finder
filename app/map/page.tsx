@@ -1,6 +1,7 @@
 import { and, desc, eq, lte } from "drizzle-orm";
 import { cityFromParam, maxPriceFromParam } from "@/lib/cities";
 import { db, schema } from "@/lib/db";
+import { SourceStrip } from "@/components/source-strip";
 import { MapPageClient } from "./client";
 
 export const dynamic = "force-dynamic";
@@ -39,5 +40,10 @@ export default async function MapPage({ searchParams }: PageProps) {
 
   const decisionMap: Record<string, "yes" | "no" | "maybe"> = {};
   for (const d of decisions) decisionMap[d.listingId] = d.decision;
-  return <MapPageClient listings={listings} decisions={decisionMap} city={city} />;
+  return (
+    <>
+      <SourceStrip city={city} className="pt-4" />
+      <MapPageClient listings={listings} decisions={decisionMap} city={city} />
+    </>
+  );
 }

@@ -68,6 +68,7 @@ export const CITIES: Record<
       "kijiji",
       "zumper",
       "apify:padmapper",
+      "padmapper",
       "livrent",
       "rentals-ca",
       "apify:facebook",

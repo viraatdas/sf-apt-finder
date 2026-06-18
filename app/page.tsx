@@ -3,6 +3,8 @@ import type { Metadata } from "next";
 import { CITIES, cityFromParam, maxPriceFromParam } from "@/lib/cities";
 import { db, schema } from "@/lib/db";
 import { SwipeDeck } from "@/components/swipe-deck";
+import { SourceStrip } from "@/components/source-strip";
+import { sourceListLabel } from "@/lib/sources";
 import { formatMoney } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +18,7 @@ export async function generateMetadata({ searchParams }: PageProps): Promise<Met
   const city = cityFromParam((await searchParams).city);
   return {
     title: `${CITIES[city].name} apartments`,
-    description: `Swipe through ${CITIES[city].name} rentals in apt-tinder.`,
+    description: `Swipe through ${CITIES[city].name} rentals from ${sourceListLabel(city)} in apt-tinder.`,
   };
 }
 
@@ -52,21 +54,29 @@ export default async function HomePage({ searchParams }: PageProps) {
 
   if (listings.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[70vh] text-center px-6">
-        <div className="text-5xl mb-4">🏚️</div>
-        <h1 className="text-2xl font-display mb-2">No listings yet</h1>
-        <p className="text-ink-900/60 max-w-md mb-4">
-          No {CITIES[city].name} listings under {formatMoney(maxPrice, city)} are available yet.
-          The cron runs daily at 7:05 AM PT. To populate immediately, hit{" "}
-          <code className="px-1.5 py-0.5 bg-ink-100 rounded text-sm">/api/cron</code>{" "}
-          from your terminal with the <code>CRON_SECRET</code>.
-        </p>
-        <code className="text-xs bg-ink-100 px-3 py-2 rounded-lg">
-          curl -H "Authorization: Bearer $CRON_SECRET" https://your-domain/api/cron
-        </code>
-      </div>
+      <>
+        <SourceStrip city={city} className="pt-4" />
+        <div className="flex flex-col items-center justify-center min-h-[70vh] text-center px-6">
+          <div className="text-5xl mb-4">🏚️</div>
+          <h1 className="text-2xl font-display mb-2">No listings yet</h1>
+          <p className="text-ink-900/60 max-w-md mb-4">
+            No {CITIES[city].name} listings under {formatMoney(maxPrice, city)} are available yet.
+            The cron runs daily at 7:05 AM PT. To populate immediately, hit{" "}
+            <code className="px-1.5 py-0.5 bg-ink-100 rounded text-sm">/api/cron</code>{" "}
+            from your terminal with the <code>CRON_SECRET</code>.
+          </p>
+          <code className="text-xs bg-ink-100 px-3 py-2 rounded-lg">
+            curl -H "Authorization: Bearer $CRON_SECRET" https://your-domain/api/cron
+          </code>
+        </div>
+      </>
     );
   }
 
-  return <SwipeDeck initial={listings} city={city} />;
+  return (
+    <>
+      <SourceStrip city={city} className="pt-4" />
+      <SwipeDeck initial={listings} city={city} />
+    </>
+  );
 }
