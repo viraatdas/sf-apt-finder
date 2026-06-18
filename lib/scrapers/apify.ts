@@ -9,6 +9,7 @@ import type { RawListing, Scraper, ScrapeContext, Source } from "./types";
 
 const APIFY_TIMEOUT_SECONDS = 120;
 const APIFY_MEMORY_MB = 512;
+const MIN_PADMAPPER_RENT = 500;
 
 interface ApifyActor {
   source: Source;
@@ -266,7 +267,7 @@ function padmapperNormalize(r: any, ctx: ScrapeContext): RawListing | null {
       title: typeof floorplan?.title === "string" ? floorplan.title : undefined,
     }))
     .filter((floorplan: NormalizedFloorplan) => {
-      if (!floorplan.price || floorplan.price > ctx.maxPrice) return false;
+      if (floorplan.price < MIN_PADMAPPER_RENT || floorplan.price > ctx.maxPrice) return false;
       if (ctx.bedrooms != null && floorplan.bedrooms != null && floorplan.bedrooms < ctx.bedrooms) {
         return false;
       }
@@ -284,7 +285,7 @@ function padmapperNormalize(r: any, ctx: ScrapeContext): RawListing | null {
     toMoney(r?.rent) ||
     toMoney(r?.minPrice) ||
     toMoney(r?.priceRange?.min);
-  if (!price || price > ctx.maxPrice) return null;
+  if (price < MIN_PADMAPPER_RENT || price > ctx.maxPrice) return null;
 
   const url = r?.url ?? r?.detailUrl ?? r?.link ?? r?.listingUrl;
   if (!url) return null;
