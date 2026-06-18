@@ -7,5 +7,6 @@ out
 .DS_Store
 *.log
 .vercel
-drizzle
+drizzle/*
+!drizzle/*.sql
 tsconfig.tsbuildinfo

@@ -11,6 +11,7 @@ import type { BrowserScraper } from "./index";
 export const zillow: BrowserScraper = {
   source: "zillow",
   async scrape(ctx: ScrapeContext, page: Page): Promise<RawListing[]> {
+    if (ctx.city !== "san-francisco" || ctx.bedrooms == null) return [];
     const state = {
       pagination: {},
       isMapVisible: true,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runAllScrapers } from "@/lib/scrapers";
 import { sendDailyDigest } from "@/lib/email";
+import { activeCities, contextDefaults } from "@/lib/cities";
 
 export const maxDuration = 300; // 5 minutes (Vercel Pro). Hobby is 60s — see README.
 export const dynamic = "force-dynamic";
@@ -13,17 +14,26 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const result = await runAllScrapers();
   const siteUrl = process.env.SITE_URL ?? "https://apt-tinder.viraat.dev";
-  await sendDailyDigest(result, siteUrl);
+  const cities = activeCities();
+  const results = [];
+
+  for (const city of cities) {
+    const result = await runAllScrapers(contextDefaults(city));
+    await sendDailyDigest(result, siteUrl, city);
+    results.push({
+      city,
+      newCount: result.newCount,
+      updatedCount: result.updatedCount,
+      totalRaw: result.totalRaw,
+      totalMerged: result.totalMerged,
+      perSource: result.perSource,
+    });
+  }
 
   return NextResponse.json({
     ok: true,
-    newCount: result.newCount,
-    updatedCount: result.updatedCount,
-    totalRaw: result.totalRaw,
-    totalMerged: result.totalMerged,
-    perSource: result.perSource,
+    cities: results,
   });
 }
 

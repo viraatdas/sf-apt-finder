@@ -3,6 +3,8 @@
  * For batch jobs we space requests out. Cached in-memory per process.
  */
 
+import { CITIES, DEFAULT_CITY, type CityId } from "./cities";
+
 const cache = new Map<string, { lat: number; lng: number } | null>();
 let lastCall = 0;
 
@@ -13,13 +15,16 @@ async function rateLimit() {
   lastCall = Date.now();
 }
 
-export async function geocode(address: string): Promise<{ lat: number; lng: number } | null> {
-  const key = address.trim().toLowerCase();
+export async function geocode(
+  address: string,
+  city: CityId = DEFAULT_CITY
+): Promise<{ lat: number; lng: number } | null> {
+  const key = `${city}:${address.trim().toLowerCase()}`;
   if (cache.has(key)) return cache.get(key) ?? null;
   await rateLimit();
   try {
     const url = new URL("https://nominatim.openstreetmap.org/search");
-    url.searchParams.set("q", `${address}, San Francisco, CA`);
+    url.searchParams.set("q", `${address}, ${CITIES[city].geocodeSuffix}`);
     url.searchParams.set("format", "json");
     url.searchParams.set("limit", "1");
     const res = await fetch(url, {

@@ -9,6 +9,7 @@ import type { BrowserScraper } from "./index";
 export const trulia: BrowserScraper = {
   source: "trulia",
   async scrape(ctx: ScrapeContext, page: Page): Promise<RawListing[]> {
+    if (ctx.city !== "san-francisco" || ctx.bedrooms == null) return [];
     const url = `https://www.trulia.com/for_rent/San_Francisco,CA/${ctx.bedrooms}p_beds/0-${ctx.maxPrice}_price/`;
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
     await page.waitForTimeout(6000);

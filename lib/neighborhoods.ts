@@ -44,9 +44,35 @@ export const SF_NEIGHBORHOODS: Neighborhood[] = [
   { name: "Outer Mission", bbox: [-122.46, 37.71, -122.435, 37.73] },
 ];
 
-export function neighborhoodFor(lat?: number | null, lng?: number | null): string | undefined {
+export const VANCOUVER_NEIGHBORHOODS: Neighborhood[] = [
+  { name: "Coal Harbour", bbox: [-123.13, 49.285, -123.105, 49.297] },
+  { name: "West End", bbox: [-123.145, 49.279, -123.125, 49.295] },
+  { name: "Downtown", bbox: [-123.13, 49.275, -123.1, 49.292] },
+  { name: "Yaletown", bbox: [-123.13, 49.271, -123.112, 49.279] },
+  { name: "Olympic Village", bbox: [-123.115, 49.265, -123.1, 49.275] },
+  { name: "Strathcona", bbox: [-123.1, 49.272, -123.075, 49.285] },
+  { name: "Fairview", bbox: [-123.14, 49.255, -123.115, 49.27] },
+  { name: "Mount Pleasant", bbox: [-123.115, 49.255, -123.09, 49.27] },
+  { name: "Kitsilano", bbox: [-123.18, 49.258, -123.135, 49.275] },
+  { name: "Commercial Drive", bbox: [-123.08, 49.26, -123.055, 49.285] },
+  { name: "Main Street", bbox: [-123.115, 49.235, -123.095, 49.255] },
+  { name: "Marpole", bbox: [-123.145, 49.2, -123.105, 49.225] },
+  { name: "Dunbar", bbox: [-123.195, 49.235, -123.17, 49.265] },
+  { name: "Point Grey", bbox: [-123.225, 49.255, -123.185, 49.275] },
+  { name: "Kerrisdale", bbox: [-123.17, 49.22, -123.14, 49.24] },
+  { name: "Burnaby Metrotown", bbox: [-123.02, 49.215, -122.985, 49.235] },
+  { name: "North Van Lonsdale", bbox: [-123.095, 49.31, -123.065, 49.335] },
+  { name: "New West Uptown", bbox: [-122.93, 49.205, -122.895, 49.225] },
+];
+
+export function neighborhoodFor(
+  lat?: number | null,
+  lng?: number | null,
+  city: "san-francisco" | "vancouver" = "san-francisco"
+): string | undefined {
   if (lat == null || lng == null) return undefined;
-  for (const n of SF_NEIGHBORHOODS) {
+  const neighborhoods = city === "vancouver" ? VANCOUVER_NEIGHBORHOODS : SF_NEIGHBORHOODS;
+  for (const n of neighborhoods) {
     const [minLng, minLat, maxLng, maxLat] = n.bbox;
     if (lng >= minLng && lng <= maxLng && lat >= minLat && lat <= maxLat) {
       return n.name;

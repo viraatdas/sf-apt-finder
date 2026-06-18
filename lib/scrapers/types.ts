@@ -1,5 +1,6 @@
 export type Source =
   | "craigslist"
+  | "kijiji"
   | "zillow"
   | "redfin"
   | "realtor"
@@ -8,6 +9,8 @@ export type Source =
   | "padmapper"
   | "hotpads"
   | "zumper"
+  | "livrent"
+  | "rentals-ca"
   | "facebook";
 
 /** A listing as scraped from a source, before dedup. */
@@ -16,7 +19,7 @@ export interface RawListing {
   sourceId: string; // stable within a source
   url: string;
   title: string;
-  price: number; // monthly $, USD
+  price: number; // monthly rent in the city's currency
   bedrooms?: number;
   bathrooms?: number;
   sqft?: number;
@@ -32,9 +35,9 @@ export interface RawListing {
 }
 
 export interface ScrapeContext {
-  bedrooms: number;
+  bedrooms: number | null;
   maxPrice: number;
-  city: string; // "san-francisco"
+  city: "san-francisco" | "vancouver";
 }
 
 export interface Scraper {

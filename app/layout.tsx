@@ -1,29 +1,30 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Suspense } from "react";
+import { CityNav } from "@/components/city-nav";
 
 const SITE_URL = process.env.SITE_URL ?? "https://apt-tinder.viraat.dev";
 
 export const metadata: Metadata = {
   title: {
-    default: "apt·tinder — swipe SF apartments",
+    default: "apt·tinder — swipe apartments",
     template: "%s · apt·tinder",
   },
-  description:
-    "Daily swipe-through of every 3BR San Francisco rental under $9k. Deduped across Zillow, Craigslist, Apartments.com, Trulia, Padmapper, and HotPads.",
+  description: "Daily swipe-through of apartment rentals, deduped across listing sources.",
   metadataBase: new URL(SITE_URL),
   applicationName: "apt-tinder",
   keywords: [
-    "San Francisco apartments",
-    "SF rentals",
-    "3 bedroom",
-    "Zillow",
+    "apartments",
+    "rentals",
     "Craigslist",
+    "Vancouver rentals",
+    "San Francisco rentals",
     "apartment swipe",
   ],
   openGraph: {
-    title: "apt·tinder — swipe SF apartments",
-    description: "Every new 3BR SF rental under $9k, deduped daily from 5+ sources.",
+    title: "apt·tinder — swipe apartments",
+    description: "Daily rental listings deduped across listing sources.",
     url: SITE_URL,
     siteName: "apt·tinder",
     type: "website",
@@ -32,7 +33,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "apt·tinder",
-    description: "Swipe through every new SF 3BR rental, daily.",
+    description: "Swipe through new apartment rentals, daily.",
   },
   robots: { index: true, follow: true },
 };
@@ -47,27 +48,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className="min-h-screen">
         <header className="border-b border-ink-100 bg-white/70 backdrop-blur sticky top-0 z-50">
-          <div className="max-w-[1600px] mx-auto px-6 h-14 flex items-center justify-between">
+          <div className="max-w-[1600px] mx-auto px-4 sm:px-6 min-h-14 py-2 flex flex-wrap gap-3 items-center justify-between">
             <Link href="/" className="font-display text-xl tracking-tight">
               apt<span className="text-accent-yes">·</span>tinder
             </Link>
-            <nav className="flex gap-1 text-sm items-center">
-              <Link href="/" className="px-3 py-1.5 rounded-full hover:bg-ink-100">
-                Swipe
-              </Link>
-              <Link href="/map" className="px-3 py-1.5 rounded-full hover:bg-ink-100">
-                Map
-              </Link>
-              <Link href="/liked" className="px-3 py-1.5 rounded-full hover:bg-ink-100">
-                Shortlist
-              </Link>
-              <a
-                href="mailto:viraat@exla.ai?subject=apt-tinder"
-                className="ml-2 px-3 py-1.5 rounded-full bg-accent-yes/10 text-accent-yes hover:bg-accent-yes/20 font-medium"
-              >
-                Interested? viraat@exla.ai
-              </a>
-            </nav>
+            <Suspense fallback={<div className="h-9 w-72 rounded-full bg-ink-100 animate-pulse" />}>
+              <CityNav />
+            </Suspense>
           </div>
         </header>
         <main>{children}</main>

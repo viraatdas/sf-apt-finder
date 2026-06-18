@@ -1,15 +1,28 @@
 name: Browser scrape (daily)
 
 on:
-  # Schedule disabled — project paused. Manual trigger still available.
+  schedule:
+    - cron: "10 14 * * *"
   workflow_dispatch:
     inputs:
+      city:
+        description: "City to scrape"
+        required: false
+        default: "vancouver"
       send_email:
         description: "Send digest email"
         required: false
         default: "true"
       sources:
-        description: "Optional single source (hotpads | apartments-com | padmapper)"
+        description: "Optional single source (livrent | rentals-ca | padmapper | hotpads | apartments-com)"
+        required: false
+        default: ""
+      max_price:
+        description: "Override max price"
+        required: false
+        default: "4000"
+      bedrooms:
+        description: "Override bedrooms; blank means city default"
         required: false
         default: ""
 
@@ -17,6 +30,10 @@ jobs:
   scrape:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        city: [vancouver]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -33,10 +50,13 @@ jobs:
           EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
           SITE_URL: ${{ secrets.SITE_URL }}
-          SEARCH_BEDROOMS: ${{ vars.SEARCH_BEDROOMS || '3' }}
-          SEARCH_MAX_PRICE: ${{ vars.SEARCH_MAX_PRICE || '9000' }}
+          SEARCH_CITY: ${{ github.event.inputs.city || matrix.city }}
+          SEARCH_BEDROOMS: ${{ github.event.inputs.bedrooms || '' }}
+          SEARCH_MAX_PRICE: ${{ github.event.inputs.max_price || '4000' }}
+          SOURCE_ARG: ${{ github.event.inputs.sources || '' }}
+          SEND_EMAIL: ${{ github.event.inputs.send_email || 'true' }}
         run: |
           ARGS=""
-          if [ -n "${{ inputs.sources }}" ]; then ARGS="${{ inputs.sources }}"; fi
-          if [ "${{ inputs.send_email }}" != "false" ]; then ARGS="$ARGS --email"; fi
+          if [ -n "$SOURCE_ARG" ]; then ARGS="$SOURCE_ARG"; fi
+          if [ "$SEND_EMAIL" != "false" ]; then ARGS="$ARGS --email"; fi
           npx tsx scripts/scrape-browser.ts $ARGS

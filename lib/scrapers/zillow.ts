@@ -7,6 +7,7 @@ import type { RawListing, Scraper, ScrapeContext } from "./types";
 export const zillow: Scraper = {
   source: "zillow",
   async scrape(ctx: ScrapeContext): Promise<RawListing[]> {
+    if (ctx.city !== "san-francisco" || ctx.bedrooms == null) return [];
     const searchQueryState = {
       pagination: {},
       isMapVisible: true,

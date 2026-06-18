@@ -10,6 +10,7 @@ import "dotenv/config";
 import { sql, and, eq, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
+import { CITIES, contextFromEnv, type CityId } from "../lib/cities";
 import * as schema from "../lib/db/schema";
 import { mergeRaw } from "../lib/dedup";
 import { neighborhoodFor } from "../lib/neighborhoods";
@@ -19,9 +20,16 @@ import { apartmentsCom } from "../lib/scrapers/browser/apartments-com";
 import { padmapper } from "../lib/scrapers/browser/padmapper";
 import { trulia } from "../lib/scrapers/browser/trulia";
 import { zillow } from "../lib/scrapers/browser/zillow";
+import { livrent } from "../lib/scrapers/browser/livrent";
+import { rentalsCa } from "../lib/scrapers/browser/rentals-ca";
 import { sendDailyDigest } from "../lib/email";
 
-const ALL: BrowserScraper[] = [zillow, trulia, hotpads, apartmentsCom, padmapper];
+const ALL: BrowserScraper[] = [zillow, trulia, hotpads, apartmentsCom, padmapper, livrent, rentalsCa];
+
+function browserScrapersFor(city: CityId): BrowserScraper[] {
+  const configured = new Set(CITIES[city].sources);
+  return ALL.filter((scraper) => configured.has(scraper.source));
+}
 
 async function main() {
   const url = process.env.DATABASE_URL;
@@ -29,20 +37,20 @@ async function main() {
   const client = postgres(url, { prepare: false, max: 3 });
   const db = drizzle(client, { schema });
 
-  const ctx = {
-    bedrooms: Number(process.env.SEARCH_BEDROOMS ?? 3),
-    maxPrice: Number(process.env.SEARCH_MAX_PRICE ?? 9000),
-    city: process.env.SEARCH_CITY ?? "san-francisco",
-  };
+  const ctx = contextFromEnv();
 
   const args = process.argv.slice(2).filter((a) => !a.startsWith("--"));
   const only = args[0];
-  const scrapers = only ? ALL.filter((s) => s.source === only) : ALL;
+  const cityScrapers = browserScrapersFor(ctx.city);
+  const scrapers = only ? cityScrapers.filter((s) => s.source === only) : cityScrapers;
   if (!scrapers.length) {
-    console.error("No scrapers selected. Known sources:", ALL.map((s) => s.source).join(", "));
+    console.error("No scrapers selected. Known sources:", cityScrapers.map((s) => s.source).join(", "));
     process.exit(1);
   }
-  console.log(`Running ${scrapers.length} browser scraper(s):`, scrapers.map((s) => s.source).join(", "));
+  console.log(
+    `Running ${scrapers.length} browser scraper(s) for ${ctx.city}:`,
+    scrapers.map((s) => s.source).join(", ")
+  );
 
   const results = await runBrowserScrapers(scrapers, ctx);
 
@@ -55,11 +63,11 @@ async function main() {
   // Filter to bedroom/price constraints
   const filtered = allRaw.filter((r) => {
     if (r.price > ctx.maxPrice) return false;
-    if (r.bedrooms != null && r.bedrooms < ctx.bedrooms) return false;
-    if (r.bedrooms != null && r.bedrooms > ctx.bedrooms + 2) return false;
+    if (ctx.bedrooms != null && r.bedrooms != null && r.bedrooms < ctx.bedrooms) return false;
+    if (ctx.bedrooms != null && r.bedrooms != null && r.bedrooms > ctx.bedrooms + 2) return false;
     return true;
   });
-  const merged = mergeRaw(filtered);
+  const merged = mergeRaw(filtered, ctx.city);
   console.log(`Filtered: ${filtered.length}, merged: ${merged.length}`);
 
   // Audit
@@ -67,6 +75,7 @@ async function main() {
     const r = results[src as keyof typeof results];
     await db.insert(schema.scrapeRuns).values({
       source: src,
+      city: ctx.city,
       rawCount: r.raw.length,
       error: r.error ?? null,
       finishedAt: new Date(),
@@ -78,9 +87,10 @@ async function main() {
   const newListings: Array<{ id: string; title: string; price: number; neighborhood?: string; url: string }> = [];
 
   for (const m of merged) {
-    const neighborhood = neighborhoodFor(m.lat, m.lng);
+    const neighborhood = neighborhoodFor(m.lat, m.lng, ctx.city);
     const values = {
       id: m.id,
+      city: ctx.city,
       title: m.title.slice(0, 500),
       addressLine: m.addressLine ?? null,
       neighborhood: neighborhood ?? null,
@@ -104,6 +114,7 @@ async function main() {
       .onConflictDoUpdate({
         target: schema.listings.id,
         set: {
+          city: values.city,
           lastSeenAt: new Date(),
           price: sql`LEAST(${schema.listings.price}, EXCLUDED.price)`,
           pricesBySource: values.pricesBySource,
@@ -142,7 +153,13 @@ async function main() {
     const swept = await db
       .update(schema.listings)
       .set({ status: "unavailable", unavailableAt: new Date() })
-      .where(and(eq(schema.listings.status, "available"), lt(schema.listings.lastSeenAt, cutoff)))
+      .where(
+        and(
+          eq(schema.listings.status, "available"),
+          eq(schema.listings.city, ctx.city),
+          lt(schema.listings.lastSeenAt, cutoff)
+        )
+      )
       .returning({ id: schema.listings.id });
     unavailableCount = swept.length;
   }
@@ -165,7 +182,8 @@ async function main() {
           perSource: perSource as any,
           newListings,
         },
-        process.env.SITE_URL ?? "https://apt-tinder.viraat.dev"
+        process.env.SITE_URL ?? "https://apt-tinder.viraat.dev",
+        ctx.city
       );
       console.log("✔ email sent");
     } else {

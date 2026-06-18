@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "apt-tinder · swipe SF apartments";
+export const alt = "apt-tinder · swipe apartments";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -59,7 +59,7 @@ export default async function Image() {
             fontFamily: "ui-monospace, monospace",
           }}
         >
-          San Francisco · 3 BR · under $9k
+          Vancouver and San Francisco rentals
         </div>
         <div
           style={{
@@ -72,7 +72,7 @@ export default async function Image() {
           }}
         >
           <span>Swipe through</span>
-          <span style={{ color: "#f9a8d4" }}>every SF rental</span>
+          <span style={{ color: "#f9a8d4" }}>fresh rentals daily</span>
         </div>
         <div
           style={{
@@ -83,7 +83,7 @@ export default async function Image() {
             fontFamily: "ui-sans-serif, system-ui, -apple-system, sans-serif",
           }}
         >
-          Zillow · Craigslist · Apartments.com · Trulia · Padmapper · HotPads — deduped daily
+          Craigslist · Kijiji · PadMapper · Zumper · liv.rent · rentals.ca — deduped daily
         </div>
       </div>
     ),

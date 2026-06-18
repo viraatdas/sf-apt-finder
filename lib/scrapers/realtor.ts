@@ -7,6 +7,7 @@ import type { RawListing, Scraper, ScrapeContext } from "./types";
 export const realtor: Scraper = {
   source: "realtor",
   async scrape(ctx: ScrapeContext): Promise<RawListing[]> {
+    if (ctx.city !== "san-francisco" || ctx.bedrooms == null) return [];
     const body = {
       query: `query ConsumerSearchQuery($query: HomeSearchCriteria!, $limit: Int, $offset: Int, $sort: [SearchAPISort]) {
         home_search: home_search(query: $query, limit: $limit, offset: $offset, sort: $sort) {

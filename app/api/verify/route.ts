@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
+import { activeCities, cityFromParam, isCityId, type CityId } from "@/lib/cities";
 import { db, schema } from "@/lib/db";
 
 export const maxDuration = 60;
@@ -46,13 +47,33 @@ export async function GET(req: NextRequest) {
   }
 
   const start = Date.now();
+  const url = new URL(req.url);
+  const requestedCity = url.searchParams.get("city");
+  const cities = isCityId(requestedCity) ? [cityFromParam(requestedCity)] : activeCities();
+  const results = [];
+
+  for (const city of cities) {
+    results.push(await verifyCity(city, start));
+    if (Date.now() - start > 55_000) break;
+  }
+
+  return NextResponse.json({
+    ok: true,
+    cities: results,
+    durationMs: Date.now() - start,
+  });
+}
+
+export const POST = GET;
+
+async function verifyCity(city: CityId, start: number) {
   const rows = await db
     .select({
       id: schema.listings.id,
       sources: schema.listings.sources,
     })
     .from(schema.listings)
-    .where(eq(schema.listings.status, "available"));
+    .where(and(eq(schema.listings.status, "available"), eq(schema.listings.city, city)));
 
   const items: Array<{ id: string; url: string }> = [];
   for (const r of rows) {
@@ -96,27 +117,29 @@ export async function GET(req: NextRequest) {
     for (let i = 0; i < unavailableIds.length; i += 200) {
       chunks.push(unavailableIds.slice(i, i + 200));
     }
-    const { inArray } = await import("drizzle-orm");
     for (const c of chunks) {
       await db
         .update(schema.listings)
         .set({ status: "unavailable", unavailableAt: new Date() })
-        .where(and(eq(schema.listings.status, "available"), inArray(schema.listings.id, c)));
+        .where(
+          and(
+            eq(schema.listings.status, "available"),
+            eq(schema.listings.city, city),
+            inArray(schema.listings.id, c)
+          )
+        );
     }
   }
 
-  return NextResponse.json({
-    ok: true,
+  return {
+    city,
     totalAvailable: items.length,
     checked,
     confirmedAvailable,
     markedUnavailable,
     skipped,
-    durationMs: Date.now() - start,
-  });
+  };
 }
-
-export const POST = GET;
 
 async function verifyOne(url: string): Promise<VerifyResult> {
   try {

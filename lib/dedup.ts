@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { DEFAULT_CITY, type CityId } from "./cities";
 import type { RawListing } from "./scrapers/types";
 
 /** Stable canonical ID for a listing.
@@ -10,6 +11,7 @@ import type { RawListing } from "./scrapers/types";
 export function canonicalId(r: {
   source?: string;
   sourceId?: string;
+  city?: CityId;
   url?: string;
   addressLine?: string;
   zip?: string;
@@ -18,17 +20,18 @@ export function canonicalId(r: {
   lat?: number;
   lng?: number;
 }): string {
+  const city = r.city ?? DEFAULT_CITY;
   if (r.lat != null && r.lng != null) {
-    const k = `geo:${r.lat.toFixed(4)},${r.lng.toFixed(4)}|${r.bedrooms ?? ""}`;
+    const k = `${city}|geo:${r.lat.toFixed(4)},${r.lng.toFixed(4)}|${r.bedrooms ?? ""}`;
     return "g_" + sha(k);
   }
   const addr = normalizeAddress(r.addressLine);
   if (isSpecificAddress(addr)) {
-    const k = `${addr}|${r.zip ?? ""}|${r.bedrooms ?? ""}`;
+    const k = `${city}|${addr}|${r.zip ?? ""}|${r.bedrooms ?? ""}`;
     return "a_" + sha(k);
   }
   // Per-source fallback: each post gets a stable, unique ID.
-  return `s_${(r.source ?? "x").slice(0, 12)}_${sha(r.sourceId ?? r.url ?? Math.random().toString())}`;
+  return `s_${(r.source ?? "x").slice(0, 12)}_${sha(`${city}|${r.sourceId ?? r.url ?? Math.random().toString()}`)}`;
 }
 
 /** Treat strings like "city of", "san francisco", neighborhood-only as not specific. */
@@ -68,7 +71,10 @@ export function normalizeAddress(input?: string): string {
   s = s.replace(/\s+/g, " ").trim();
   // drop city/state suffix
   s = s.replace(/\bsan francisco\b.*$/, "").trim();
+  s = s.replace(/\bvancouver\b.*$/, "").trim();
   s = s.replace(/\bca\b.*$/, "").trim();
+  s = s.replace(/\bbc\b.*$/, "").trim();
+  s = s.replace(/\bcanada\b.*$/, "").trim();
   return s;
 }
 
@@ -94,10 +100,10 @@ export interface MergedListing {
   raw: Record<string, unknown>;
 }
 
-export function mergeRaw(raws: RawListing[]): MergedListing[] {
+export function mergeRaw(raws: RawListing[], city: CityId = DEFAULT_CITY): MergedListing[] {
   const buckets = new Map<string, RawListing[]>();
   for (const r of raws) {
-    const id = canonicalId(r);
+    const id = canonicalId({ ...r, city });
     const arr = buckets.get(id) ?? [];
     arr.push(r);
     buckets.set(id, arr);

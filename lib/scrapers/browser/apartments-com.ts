@@ -9,6 +9,7 @@ import type { BrowserScraper } from "./index";
 export const apartmentsCom: BrowserScraper = {
   source: "apartments-com",
   async scrape(ctx: ScrapeContext, page: Page): Promise<RawListing[]> {
+    if (ctx.city !== "san-francisco" || ctx.bedrooms == null) return [];
     const url = `https://www.apartments.com/san-francisco-ca/${ctx.bedrooms}-bedrooms-under-${ctx.maxPrice}/`;
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
     await page.waitForTimeout(4000);

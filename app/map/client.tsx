@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { formatMoney } from "@/lib/utils";
 import type { Listing } from "@/lib/db/schema";
+import type { CityId } from "@/lib/cities";
 
 const ListingMap = dynamic(() => import("@/components/listing-map").then((m) => m.ListingMap), {
   ssr: false,
@@ -15,9 +16,11 @@ type Decision = "yes" | "no" | "maybe";
 export function MapPageClient({
   listings,
   decisions,
+  city,
 }: {
   listings: Listing[];
   decisions: Record<string, Decision>;
+  city: CityId;
 }) {
   const [filter, setFilter] = useState<"all" | Decision | "undecided">("all");
   const [neighborhood, setNeighborhood] = useState<string | null>(null);
@@ -112,7 +115,7 @@ export function MapPageClient({
                 >
                   <span className="truncate">{name}</span>
                   <span className="text-xs opacity-60 ml-2 shrink-0">
-                    {items.length} · from {formatMoney(minPrice === Infinity ? null : minPrice)}
+                    {items.length} · from {formatMoney(minPrice === Infinity ? null : minPrice, city)}
                   </span>
                 </button>
               );
@@ -124,7 +127,7 @@ export function MapPageClient({
       {/* Map + list */}
       <div className="grid grid-rows-[1fr_auto] gap-4">
         <div className="h-[60vh] lg:h-[calc(100vh-9rem)] rounded-2xl overflow-hidden border border-ink-100 shadow-sm">
-          <ListingMap pins={pins} focus={focus} />
+          <ListingMap pins={pins} focus={focus} city={city} />
         </div>
       </div>
     </div>

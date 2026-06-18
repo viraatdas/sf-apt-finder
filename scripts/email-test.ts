@@ -1,8 +1,10 @@
 import "dotenv/config";
 import postgres from "postgres";
 import { sendDailyDigest } from "../lib/email";
+import { contextFromEnv } from "../lib/cities";
 
 async function main() {
+  const ctx = contextFromEnv();
   const sql = postgres(process.env.DATABASE_URL!, { prepare: false });
   const rows = await sql`
     SELECT id, title, price, neighborhood,
@@ -10,6 +12,7 @@ async function main() {
       (sources->0->>'url') AS url
     FROM listings
     WHERE status='available'
+      AND city=${ctx.city}
       AND jsonb_array_length(coalesce(photo_urls,'[]'::jsonb))>0
     ORDER BY last_seen_at DESC
     LIMIT 100`;
@@ -34,9 +37,10 @@ async function main() {
       perSource,
       newListings,
     } as any,
-    process.env.SITE_URL ?? "https://apt-tinder.viraat.dev"
+    process.env.SITE_URL ?? "https://apt-tinder.viraat.dev",
+    ctx.city
   );
   await sql.end();
-  console.log("✔ test email sent");
+  console.log(`✔ test email sent for ${ctx.city}`);
 }
 main().catch((e) => { console.error(e); process.exit(1); });

@@ -1,7 +1,7 @@
 import type { RawListing, Scraper, ScrapeContext } from "./types";
 
 /**
- * Craigslist SF Bay — apartments for rent, SF city only (sfc).
+ * Craigslist apartments-for-rent search by city.
  *
  * As of 2025 Craigslist serves a static search page with results in
  * <li class="cl-static-search-result"> blocks. RSS now returns 403.
@@ -21,12 +21,20 @@ const DETAIL_CONCURRENCY = Number(process.env.CL_DETAIL_CONCURRENCY ?? 25);
 const DETAIL_TIMEOUT_MS = 7000;
 // Enrich everything by default — detail pages are cheap, concurrency handles speed.
 const ENRICH_BUDGET = Number(process.env.CL_ENRICH_BUDGET ?? 200);
+
+const SEARCH_URLS = {
+  "san-francisco": "https://sfbay.craigslist.org/search/sfc/apa",
+  vancouver: "https://vancouver.craigslist.org/search/van/apa",
+} as const;
+
 export const craigslist: Scraper = {
   source: "craigslist",
   async scrape(ctx: ScrapeContext): Promise<RawListing[]> {
-    const url = new URL("https://sfbay.craigslist.org/search/sfc/apa");
-    url.searchParams.set("min_bedrooms", String(ctx.bedrooms));
-    url.searchParams.set("max_bedrooms", String(ctx.bedrooms + 1));
+    const url = new URL(SEARCH_URLS[ctx.city]);
+    if (ctx.bedrooms != null) {
+      url.searchParams.set("min_bedrooms", String(ctx.bedrooms));
+      url.searchParams.set("max_bedrooms", String(ctx.bedrooms + 1));
+    }
     url.searchParams.set("max_price", String(ctx.maxPrice));
 
     const res = await fetch(url, { headers: BROWSER_HEADERS });

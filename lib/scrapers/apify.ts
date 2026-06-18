@@ -17,10 +17,11 @@ interface ApifyActor {
   normalize: (row: any, ctx: ScrapeContext) => RawListing | null;
 }
 
-const SF_SEARCH_URLS = {
+const SEARCH_URLS = {
   /** Zillow requires searchQueryState with their SHORT filter keys (fr/fsba/beds/price)
    * for rentals — not the long names. Long names silently return 0 results. */
-  zillow: (beds: number, maxPrice: number) => {
+  zillow: (city: ScrapeContext["city"], beds: number, maxPrice: number) => {
+    if (city !== "san-francisco") return "";
     const state = {
       pagination: {},
       isMapVisible: true,
@@ -44,12 +45,25 @@ const SF_SEARCH_URLS = {
     };
     return `https://www.zillow.com/san-francisco-ca/rentals/?searchQueryState=${encodeURIComponent(JSON.stringify(state))}`;
   },
-  apartments: (beds: number, maxPrice: number) =>
-    `https://www.apartments.com/san-francisco-ca/${beds}-bedrooms-under-${maxPrice}/`,
-  padmapper: () => `https://www.padmapper.com/apartments/san-francisco-ca`,
-  facebook: (beds: number, maxPrice: number) =>
-    `https://www.facebook.com/marketplace/sanfrancisco/propertyrentals?minBedrooms=${beds}&maxPrice=${maxPrice}`,
+  apartments: (city: ScrapeContext["city"], beds: number, maxPrice: number) =>
+    city === "san-francisco"
+      ? `https://www.apartments.com/san-francisco-ca/${beds}-bedrooms-under-${maxPrice}/`
+      : "",
+  padmapper: (city: ScrapeContext["city"]) =>
+    city === "vancouver"
+      ? "https://www.padmapper.com/apartments/vancouver-bc"
+      : "https://www.padmapper.com/apartments/san-francisco-ca",
+  facebook: (city: ScrapeContext["city"], beds: number | null, maxPrice: number) => {
+    const market = city === "vancouver" ? "vancouver" : "sanfrancisco";
+    const bedsParam = beds == null ? "" : `&minBedrooms=${beds}`;
+    return `https://www.facebook.com/marketplace/${market}/propertyrentals?maxPrice=${maxPrice}${bedsParam}`;
+  },
 };
+
+const LOCATION_BY_CITY = {
+  "san-francisco": "San Francisco, CA",
+  vancouver: "Vancouver, BC",
+} as const;
 
 const ACTORS: ApifyActor[] = [
   // Zillow via igolaizola/zillow-scraper-ppe — returns full photo galleries.
@@ -58,9 +72,9 @@ const ACTORS: ApifyActor[] = [
     source: "zillow",
     actorId: "igolaizola~zillow-scraper-ppe",
     buildInput: (ctx) => ({
-      location: "San Francisco, CA",
+      location: LOCATION_BY_CITY[ctx.city],
       operation: "rent",
-      minBeds: ctx.bedrooms,
+      ...(ctx.bedrooms == null ? {} : { minBeds: ctx.bedrooms }),
       maxPrice: ctx.maxPrice,
       maxItems: 200,
     }),
@@ -100,7 +114,10 @@ const ACTORS: ApifyActor[] = [
     source: "apartments-com",
     actorId: "pro100chok~apartments-scraper-usage",
     buildInput: (ctx) => ({
-      startUrls: [{ url: SF_SEARCH_URLS.apartments(ctx.bedrooms, ctx.maxPrice) }],
+      startUrls:
+        ctx.bedrooms == null
+          ? []
+          : [{ url: SEARCH_URLS.apartments(ctx.city, ctx.bedrooms, ctx.maxPrice) }],
       maxPages: 2,
       maxItems: 60,
       includeDetails: true,
@@ -114,7 +131,7 @@ const ACTORS: ApifyActor[] = [
     source: "padmapper",
     actorId: "lexis-solutions~padmapper-scraper",
     buildInput: (ctx) => ({
-      startUrls: [{ url: SF_SEARCH_URLS.padmapper() }],
+      startUrls: [{ url: SEARCH_URLS.padmapper(ctx.city) }],
       maxItems: 30,
       maxChargedResults: 30,
     }),
@@ -126,9 +143,9 @@ const ACTORS: ApifyActor[] = [
     actorId: "benthepythondev~hotpads-rental-scraper",
     buildInput: (ctx) => ({
       mode: "search",
-      location: "San Francisco, CA",
+      location: LOCATION_BY_CITY[ctx.city],
       propertyType: "apartment",
-      minBeds: ctx.bedrooms,
+      ...(ctx.bedrooms == null ? {} : { minBeds: ctx.bedrooms }),
       maxPrice: ctx.maxPrice,
       maxListings: 30,
       maxChargedResults: 30,
@@ -142,9 +159,9 @@ const ACTORS: ApifyActor[] = [
     actorId: "benthepythondev~zumper-rental-scraper",
     buildInput: (ctx) => ({
       mode: "search",
-      location: "San Francisco, CA",
+      location: LOCATION_BY_CITY[ctx.city],
       propertyType: "apartment",
-      minBeds: ctx.bedrooms,
+      ...(ctx.bedrooms == null ? {} : { minBeds: ctx.bedrooms }),
       maxPrice: ctx.maxPrice,
       maxListings: 30,
       maxChargedResults: 30,

@@ -19,6 +19,7 @@ export const listings = pgTable(
   "listings",
   {
     id: text("id").primaryKey(), // stable hash: street+zip+beds+sqft
+    city: text("city").notNull().default("san-francisco"),
     title: text("title").notNull(),
     addressLine: text("address_line"),
     neighborhood: text("neighborhood"),
@@ -53,6 +54,7 @@ export const listings = pgTable(
   },
   (t) => ({
     byNeighborhood: index("listings_neighborhood_idx").on(t.neighborhood),
+    byCity: index("listings_city_idx").on(t.city),
     byPrice: index("listings_price_idx").on(t.price),
     byLastSeen: index("listings_last_seen_idx").on(t.lastSeenAt),
     byStatus: index("listings_status_idx").on(t.status),
@@ -82,6 +84,7 @@ export const decisions = pgTable(
 /** Audit log of scrape runs. */
 export const scrapeRuns = pgTable("scrape_runs", {
   id: serial("id").primaryKey(),
+  city: text("city").notNull().default("san-francisco"),
   startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
   finishedAt: timestamp("finished_at", { withTimezone: true }),
   source: text("source").notNull(),

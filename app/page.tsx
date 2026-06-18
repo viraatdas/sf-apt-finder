@@ -1,11 +1,29 @@
-import { and, desc, eq, notInArray } from "drizzle-orm";
+import { and, desc, eq, lte, notInArray } from "drizzle-orm";
+import type { Metadata } from "next";
+import { CITIES, cityFromParam, maxPriceFromParam } from "@/lib/cities";
 import { db, schema } from "@/lib/db";
 import { SwipeDeck } from "@/components/swipe-deck";
+import { formatMoney } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export default async function HomePage() {
+type PageProps = {
+  searchParams: Promise<{ city?: string; maxPrice?: string }>;
+};
+
+export async function generateMetadata({ searchParams }: PageProps): Promise<Metadata> {
+  const city = cityFromParam((await searchParams).city);
+  return {
+    title: `${CITIES[city].name} apartments`,
+    description: `Swipe through ${CITIES[city].name} rentals in apt-tinder.`,
+  };
+}
+
+export default async function HomePage({ searchParams }: PageProps) {
+  const params = await searchParams;
+  const city = cityFromParam(params.city);
+  const maxPrice = maxPriceFromParam(city, params.maxPrice);
   // Pull undecided, available listings for the default "household" user.
   let listings: typeof schema.listings.$inferSelect[] = [];
   try {
@@ -21,6 +39,8 @@ export default async function HomePage() {
       .where(
         and(
           eq(schema.listings.status, "available"),
+          eq(schema.listings.city, city),
+          lte(schema.listings.price, maxPrice),
           decidedIds.length ? notInArray(schema.listings.id, decidedIds) : undefined
         )
       )
@@ -36,6 +56,7 @@ export default async function HomePage() {
         <div className="text-5xl mb-4">🏚️</div>
         <h1 className="text-2xl font-display mb-2">No listings yet</h1>
         <p className="text-ink-900/60 max-w-md mb-4">
+          No {CITIES[city].name} listings under {formatMoney(maxPrice, city)} are available yet.
           The cron runs daily at 7:05 AM PT. To populate immediately, hit{" "}
           <code className="px-1.5 py-0.5 bg-ink-100 rounded text-sm">/api/cron</code>{" "}
           from your terminal with the <code>CRON_SECRET</code>.
@@ -47,5 +68,5 @@ export default async function HomePage() {
     );
   }
 
-  return <SwipeDeck initial={listings} />;
+  return <SwipeDeck initial={listings} city={city} />;
 }

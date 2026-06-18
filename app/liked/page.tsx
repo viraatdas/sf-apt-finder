@@ -1,6 +1,7 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, lte } from "drizzle-orm";
 import Link from "next/link";
 import { Bed, Bath, Maximize2, MapPin, ExternalLink } from "lucide-react";
+import { cityFromParam, maxPriceFromParam, type CityId } from "@/lib/cities";
 import { db, schema } from "@/lib/db";
 import { formatMoney } from "@/lib/utils";
 
@@ -13,7 +14,14 @@ type Row = {
   decidedAt: Date;
 };
 
-export default async function LikedPage() {
+type PageProps = {
+  searchParams: Promise<{ city?: string; maxPrice?: string }>;
+};
+
+export default async function LikedPage({ searchParams }: PageProps) {
+  const params = await searchParams;
+  const city = cityFromParam(params.city);
+  const maxPrice = maxPriceFromParam(city, params.maxPrice);
   let rows: Row[] = [];
   try {
     rows = (await db
@@ -24,7 +32,13 @@ export default async function LikedPage() {
       })
       .from(schema.decisions)
       .innerJoin(schema.listings, eq(schema.decisions.listingId, schema.listings.id))
-      .where(eq(schema.decisions.userId, "household"))
+      .where(
+        and(
+          eq(schema.decisions.userId, "household"),
+          eq(schema.listings.city, city),
+          lte(schema.listings.price, maxPrice)
+        )
+      )
       .orderBy(desc(schema.decisions.createdAt))) as any;
   } catch (err) {
     console.warn("DB read failed", err);
@@ -47,6 +61,7 @@ export default async function LikedPage() {
           title="Loved"
           emoji="❤️"
           rows={groups.yes}
+          city={city}
           color="text-accent-yes"
           accent="border-accent-yes/50"
         />
@@ -54,6 +69,7 @@ export default async function LikedPage() {
           title="Maybe"
           emoji="🤔"
           rows={groups.maybe}
+          city={city}
           color="text-amber-600"
           accent="border-accent-maybe/50"
         />
@@ -61,6 +77,7 @@ export default async function LikedPage() {
           title="Passed"
           emoji="🚫"
           rows={groups.no}
+          city={city}
           color="text-accent-no"
           accent="border-accent-no/30"
         />
@@ -75,12 +92,14 @@ function Column({
   color,
   accent,
   rows,
+  city,
 }: {
   title: string;
   emoji: string;
   color: string;
   accent: string;
   rows: Row[];
+  city: CityId;
 }) {
   return (
     <div>
@@ -95,14 +114,14 @@ function Column({
           </div>
         )}
         {rows.map((r) => (
-          <ListingCard key={r.listing.id} row={r} accent={accent} />
+          <ListingCard key={r.listing.id} row={r} accent={accent} city={city} />
         ))}
       </div>
     </div>
   );
 }
 
-function ListingCard({ row, accent }: { row: Row; accent: string }) {
+function ListingCard({ row, accent, city }: { row: Row; accent: string; city: CityId }) {
   const { listing } = row;
   const photos = (listing.photoUrls as string[] | null) ?? [];
   const sources = (listing.sources as any[] | null) ?? [];
@@ -140,7 +159,7 @@ function ListingCard({ row, accent }: { row: Row; accent: string }) {
           </div>
         )}
         <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/80 to-transparent flex items-end justify-between text-white">
-          <div className="text-2xl font-bold drop-shadow-lg">{formatMoney(listing.price)}</div>
+          <div className="text-2xl font-bold drop-shadow-lg">{formatMoney(listing.price, city)}</div>
           {listing.neighborhood && (
             <div className="bg-white/95 text-ink-900 rounded-full px-2.5 py-1 text-xs font-semibold flex items-center gap-1 shadow-md">
               <MapPin className="w-3 h-3" /> {listing.neighborhood}

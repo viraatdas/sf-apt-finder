@@ -8,6 +8,7 @@ import type { RawListing, Scraper, ScrapeContext } from "./types";
 export const redfin: Scraper = {
   source: "redfin",
   async scrape(ctx: ScrapeContext): Promise<RawListing[]> {
+    if (ctx.city !== "san-francisco" || ctx.bedrooms == null) return [];
     const params = new URLSearchParams({
       al: "1",
       market: "sanfrancisco",

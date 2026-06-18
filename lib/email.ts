@@ -1,14 +1,12 @@
 import { Resend } from "resend";
 import { db, schema } from "@/lib/db";
-import { desc, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import type { ScrapeResult } from "./scrapers";
 import { checkApifyBalance, type ApifyBalance } from "./apify-balance";
+import { CITIES, DEFAULT_CITY, type CityId } from "./cities";
+import { formatMoney } from "./utils";
 
-const FROM = process.env.EMAIL_FROM ?? "SF Apt Finder <onboarding@resend.dev>";
-const TO = (process.env.EMAIL_TO ?? "viraat.laldas@gmail.com,sambruns2000@gmail.com")
-  .split(",")
-  .map((s) => s.trim())
-  .filter(Boolean);
+const FROM = process.env.EMAIL_FROM ?? "apt-tinder <onboarding@resend.dev>";
 
 const MORE_LIMIT = 10;
 
@@ -40,7 +38,13 @@ interface MoreItem {
   bedrooms: number | null;
 }
 
-export async function sendDailyDigest(result: ScrapeResult, siteUrl: string): Promise<void> {
+export async function sendDailyDigest(
+  result: ScrapeResult,
+  siteUrl: string,
+  city: CityId = DEFAULT_CITY
+): Promise<void> {
+  const cityConfig = CITIES[city];
+  const recipients = cityConfig.recipients;
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
     console.warn("RESEND_API_KEY not set; skipping email");
@@ -58,21 +62,22 @@ export async function sendDailyDigest(result: ScrapeResult, siteUrl: string): Pr
     ? await db
         .select()
         .from(schema.listings)
-        .where(inArray(schema.listings.id, newIds))
+        .where(and(eq(schema.listings.city, city), inArray(schema.listings.id, newIds)))
         .orderBy(desc(schema.listings.firstSeenAt))
     : [];
 
-  const featured = pickFeatured(fullRows);
+  const featured = pickFeatured(fullRows, city);
   const more = pickMore(fullRows, featured);
   const apifyBalance = await checkApifyBalance();
+  const digestUrl = siteUrlForCity(siteUrl, city);
 
-  const html = renderHtml(result, featured, more, siteUrl, apifyBalance);
-  const text = renderText(result, featured, more, siteUrl, apifyBalance);
+  const html = renderHtml(result, featured, more, digestUrl, apifyBalance, city, recipients.length);
+  const text = renderText(result, featured, more, digestUrl, apifyBalance, city);
 
   const { data, error } = await resend.emails.send({
     from: FROM,
-    to: TO,
-    subject: `🏠 ${result.newCount} new SF apartments today`,
+    to: recipients,
+    subject: `🏠 ${result.newCount} new ${cityConfig.name} apartments today`,
     html,
     text,
   });
@@ -101,7 +106,7 @@ function sourceOf(r: typeof schema.listings.$inferSelect): string {
 }
 
 /** Pick 3 featured — STRICTLY from different sources when possible. */
-function pickFeatured(rows: (typeof schema.listings.$inferSelect)[]): Featured[] {
+function pickFeatured(rows: (typeof schema.listings.$inferSelect)[], city: CityId): Featured[] {
   if (!rows.length) return [];
   // Group by source; pick the highest-scored from each
   const bySource = new Map<string, typeof schema.listings.$inferSelect>();
@@ -112,7 +117,10 @@ function pickFeatured(rows: (typeof schema.listings.$inferSelect)[]): Featured[]
     if (!prev || score(r) > score(prev)) bySource.set(src, r);
   }
   // Pick top 3 sources by their best listing score, in this preferred order
-  const preferredOrder = ["zillow", "apartments-com", "trulia", "padmapper", "craigslist", "hotpads"];
+  const preferredOrder =
+    city === "vancouver"
+      ? ["kijiji", "craigslist", "livrent", "rentals-ca", "padmapper", "zumper", "facebook"]
+      : ["zillow", "apartments-com", "trulia", "padmapper", "craigslist", "hotpads"];
   const picks: typeof schema.listings.$inferSelect[] = [];
   for (const src of preferredOrder) {
     if (picks.length >= 3) break;
@@ -188,18 +196,20 @@ function renderText(
   featured: Featured[],
   more: MoreItem[],
   siteUrl: string,
-  apify: ApifyBalance | null
+  apify: ApifyBalance | null,
+  city: CityId
 ): string {
+  const cityName = CITIES[city].name;
   const lines: string[] = [];
   if (apify && apify.status !== "ok") {
-    lines.push(`⚠️ APIFY ${apify.status.toUpperCase()}: $${apify.usedUsd.toFixed(2)} of $${apify.capUsd.toFixed(0)} used (${apify.percentage.toFixed(0)}%). Zillow scraping ${apify.status === "exhausted" ? "STOPPED" : "may stop soon"}. Top up at https://console.apify.com/billing\n`);
+    lines.push(`⚠️ APIFY ${apify.status.toUpperCase()}: $${apify.usedUsd.toFixed(2)} of $${apify.capUsd.toFixed(0)} used (${apify.percentage.toFixed(0)}%). Apify-backed scraping ${apify.status === "exhausted" ? "STOPPED" : "may stop soon"}. Top up at https://console.apify.com/billing\n`);
   }
-  lines.push(`🏠 ${result.newCount} new SF apartments today`);
+  lines.push(`🏠 ${result.newCount} new ${cityName} apartments today`);
   lines.push(`→ ${siteUrl}\n`);
   if (featured.length) {
     lines.push("== Featured ==");
     for (const f of featured) {
-      lines.push(`  $${f.price.toLocaleString()} · ${f.neighborhood ?? "—"} · ${f.source}`);
+      lines.push(`  ${formatMoney(f.price, city)} · ${f.neighborhood ?? "—"} · ${f.source}`);
       lines.push(`    ${f.title}`);
       lines.push(`    ${f.url}\n`);
     }
@@ -207,7 +217,7 @@ function renderText(
   if (more.length) {
     lines.push(`== ${more.length} more ==`);
     for (const it of more) {
-      lines.push(`  $${it.price.toLocaleString()} · ${it.neighborhood ?? "—"} · ${it.source} · ${it.title}`);
+      lines.push(`  ${formatMoney(it.price, city)} · ${it.neighborhood ?? "—"} · ${it.source} · ${it.title}`);
     }
     lines.push("");
   }
@@ -220,11 +230,14 @@ function renderHtml(
   featured: Featured[],
   more: MoreItem[],
   siteUrl: string,
-  apify: ApifyBalance | null
+  apify: ApifyBalance | null,
+  city: CityId,
+  recipientCount: number
 ): string {
   const apifyBanner = renderApifyBanner(apify);
+  const cityName = CITIES[city].name;
   const featuredHtml = featured.length
-    ? featured.map((f) => renderFeatured(f)).join("")
+    ? featured.map((f) => renderFeatured(f, city)).join("")
     : "";
 
   const moreHtml = more.length
@@ -233,7 +246,7 @@ function renderHtml(
       Also new today
     </h2>
     <table style="width:100%;border-collapse:separate;border-spacing:0;background:#fff;border:1px solid #eee;border-radius:16px;overflow:hidden">
-      ${more.map((it, i) => renderRow(it, i === more.length - 1)).join("")}
+      ${more.map((it, i) => renderRow(it, i === more.length - 1, city)).join("")}
     </table>` : "";
 
   return `<!doctype html>
@@ -249,7 +262,7 @@ function renderHtml(
           ${result.newCount} new
         </h1>
         <div style="font:600 36px ui-serif,Georgia,serif;margin:0 0 20px;letter-spacing:-0.6px;line-height:1.05;color:#a8a29e">
-          SF apartments to review
+          ${cityName} apartments to review
         </div>
         <a href="${siteUrl}"
            style="display:inline-block;background:#fff;color:#0a0a0c;padding:14px 26px;border-radius:999px;text-decoration:none;font-weight:700;font-size:15px">
@@ -279,13 +292,13 @@ function renderHtml(
       </div>
 
       <p style="margin-top:24px;color:#999;font-size:12px;text-align:center">
-        apt-tinder · daily at 7:05 AM PT · sent to ${TO.length} ${TO.length === 1 ? "person" : "people"}
+        apt-tinder · daily at 7:05 AM PT · sent to ${recipientCount} ${recipientCount === 1 ? "person" : "people"}
       </p>
     </div>
   </body></html>`;
 }
 
-function renderFeatured(f: Featured): string {
+function renderFeatured(f: Featured, city: CityId): string {
   const specs: string[] = [];
   if (f.bedrooms != null) specs.push(`${f.bedrooms} bd`);
   if (f.bathrooms != null) specs.push(`${f.bathrooms} ba`);
@@ -301,7 +314,7 @@ function renderFeatured(f: Featured): string {
         ${img}
         <div style="padding:16px 18px">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:6px">
-            <div style="font:700 24px ui-serif,Georgia,serif">$${f.price.toLocaleString()}<span style="font-size:13px;color:#888;font-weight:400"> /mo</span></div>
+            <div style="font:700 24px ui-serif,Georgia,serif">${formatMoney(f.price, city)}<span style="font-size:13px;color:#888;font-weight:400"> /mo</span></div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
               ${f.neighborhood ? `<span style="background:#0a0a0c;color:#fff;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:600">📍 ${escape(f.neighborhood)}</span>` : ""}
               <span style="background:#ec4899;color:#fff;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:600">${escape(f.source)}</span>
@@ -330,7 +343,7 @@ function renderContactInline(f: Featured): string {
   return `<div style="margin-top:6px;padding:8px 10px;background:#f0fdfa;border:1px solid #99f6e4;border-radius:8px;font-size:12px;display:flex;flex-wrap:wrap;gap:8px;">${bits.join('<span style="color:#999">·</span>')}</div>`;
 }
 
-function renderRow(it: MoreItem, isLast: boolean): string {
+function renderRow(it: MoreItem, isLast: boolean, city: CityId): string {
   const thumb = it.photo
     ? `<img src="${it.photo}" alt="" width="64" height="64" style="width:64px;height:64px;object-fit:cover;border-radius:10px;display:block">`
     : `<div style="width:64px;height:64px;background:#f0f0f0;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:24px;color:#ccc">🏠</div>`;
@@ -343,7 +356,7 @@ function renderRow(it: MoreItem, isLast: boolean): string {
             <tr>
               <td style="width:64px;padding-right:14px;vertical-align:middle">${thumb}</td>
               <td style="vertical-align:middle">
-                <div style="font:700 17px -apple-system,sans-serif;margin-bottom:2px">$${it.price.toLocaleString()}<span style="font-size:12px;color:#888;font-weight:400"> /mo</span></div>
+                <div style="font:700 17px -apple-system,sans-serif;margin-bottom:2px">${formatMoney(it.price, city)}<span style="font-size:12px;color:#888;font-weight:400"> /mo</span></div>
                 <div style="font-size:12px;color:#555;line-height:1.35;margin-bottom:2px">${escape(it.title).slice(0, 90)}</div>
                 <div style="font-size:11px;color:#888">
                   ${it.neighborhood ? `📍 ${escape(it.neighborhood)} · ` : ""}${escape(it.source)}
@@ -366,7 +379,7 @@ function renderApifyBanner(apify: ApifyBalance | null): string {
       fg: "#78350f",
       emoji: "⚠️",
       title: "Apify credit running low",
-      body: `You've used $${apify.usedUsd.toFixed(2)} of $${apify.capUsd.toFixed(0)} (${apify.percentage.toFixed(0)}%) this month. Zillow scraping uses Apify — if you hit the cap, today's Zillow listings may stop refreshing.`,
+      body: `You've used $${apify.usedUsd.toFixed(2)} of $${apify.capUsd.toFixed(0)} (${apify.percentage.toFixed(0)}%) this month. Apify-backed scraping may stop refreshing if you hit the cap.`,
     },
     critical: {
       bg: "#fee2e2",
@@ -374,15 +387,15 @@ function renderApifyBanner(apify: ApifyBalance | null): string {
       fg: "#7f1d1d",
       emoji: "🚨",
       title: "Apify credit almost gone",
-      body: `Used $${apify.usedUsd.toFixed(2)} of $${apify.capUsd.toFixed(0)} (${apify.percentage.toFixed(0)}%). Zillow will stop scraping at $${apify.capUsd.toFixed(0)}. Only $${apify.remainingUsd.toFixed(2)} remaining.`,
+      body: `Used $${apify.usedUsd.toFixed(2)} of $${apify.capUsd.toFixed(0)} (${apify.percentage.toFixed(0)}%). Apify-backed scraping will stop at $${apify.capUsd.toFixed(0)}. Only $${apify.remainingUsd.toFixed(2)} remaining.`,
     },
     exhausted: {
       bg: "#1f2937",
       border: "#dc2626",
       fg: "#fecaca",
       emoji: "🛑",
-      title: "Apify cap hit — Zillow paused",
-      body: `Used $${apify.usedUsd.toFixed(2)} of $${apify.capUsd.toFixed(0)}. Zillow scraping has stopped. Add credit or raise your spending limit to resume.`,
+      title: "Apify cap hit",
+      body: `Used $${apify.usedUsd.toFixed(2)} of $${apify.capUsd.toFixed(0)}. Apify-backed scraping has stopped. Add credit or raise your spending limit to resume.`,
     },
     unknown: { bg: "", border: "", fg: "", emoji: "", title: "", body: "" },
   };
@@ -407,6 +420,17 @@ function renderApifyBanner(apify: ApifyBalance | null): string {
 function todayLabel(): string {
   const d = new Date();
   return d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+}
+
+function siteUrlForCity(siteUrl: string, city: CityId): string {
+  try {
+    const url = new URL(siteUrl);
+    url.searchParams.set("city", city);
+    return url.toString();
+  } catch {
+    const sep = siteUrl.includes("?") ? "&" : "?";
+    return `${siteUrl}${sep}city=${encodeURIComponent(city)}`;
+  }
 }
 
 function escape(s: string): string {

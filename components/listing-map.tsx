@@ -3,6 +3,8 @@
 import { useEffect } from "react";
 import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
+import { CITIES, DEFAULT_CITY, type CityId } from "@/lib/cities";
+import { formatMoney } from "@/lib/utils";
 
 // Fix default marker icons in webpack
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -29,15 +31,18 @@ function PriceIcon({
   color,
   highlighted,
   textColor = "#fff",
+  city,
 }: {
   price: number;
   color: string;
   highlighted?: boolean;
   textColor?: string;
+  city: CityId;
 }) {
   const pad = highlighted ? "6px 12px" : "4px 8px";
   const size = highlighted ? "13px" : "11px";
   const border = highlighted ? "3px solid #fff" : "2px solid #fff";
+  const label = `$${(price / 1000).toFixed(1)}k${CITIES[city].currency === "CAD" ? " CAD" : ""}`;
   const shadow = highlighted
     ? "0 4px 14px rgba(0,0,0,.4), 0 0 0 2px #ec4899"
     : "0 2px 6px rgba(0,0,0,.2)";
@@ -52,12 +57,12 @@ function PriceIcon({
     border:${border};
     transform: ${highlighted ? "scale(1.05)" : "scale(1)"};
     transition: transform .2s;
-  ">$${(price / 1000).toFixed(1)}k</div>`;
+  ">${label}</div>`;
   return L.divIcon({
     html,
     className: "",
-    iconSize: highlighted ? [70, 32] : [60, 24],
-    iconAnchor: highlighted ? [35, 16] : [30, 12],
+    iconSize: CITIES[city].currency === "CAD" ? [92, 28] : (highlighted ? [70, 32] : [60, 24]),
+    iconAnchor: CITIES[city].currency === "CAD" ? [46, 14] : (highlighted ? [35, 16] : [30, 12]),
   });
 }
 
@@ -75,16 +80,20 @@ export function ListingMap({
   pins,
   focus,
   height = "100%",
+  city = DEFAULT_CITY,
 }: {
   pins: MapPin[];
   focus?: { lat: number; lng: number };
   height?: string;
+  city?: CityId;
 }) {
+  const cityConfig = CITIES[city];
   const validPins = pins.filter((p) => p.lat != null && p.lng != null);
   return (
     <MapContainer
-      center={[37.7749, -122.4194]}
-      zoom={12}
+      key={city}
+      center={cityConfig.mapCenter}
+      zoom={cityConfig.mapZoom}
       scrollWheelZoom
       style={{ height, width: "100%", borderRadius: 12 }}
     >
@@ -109,12 +118,12 @@ export function ListingMap({
           <Marker
             key={p.id}
             position={[p.lat, p.lng]}
-            icon={PriceIcon({ price: p.price, color, highlighted: p.highlighted }) as any}
+            icon={PriceIcon({ price: p.price, color, highlighted: p.highlighted, city }) as any}
             zIndexOffset={p.highlighted ? 1000 : 0}
           >
             <Popup>
               <div style={{ font: "13px -apple-system,sans-serif", minWidth: 160 }}>
-                <div style={{ fontWeight: 600 }}>${p.price.toLocaleString()}/mo</div>
+                <div style={{ fontWeight: 600 }}>{formatMoney(p.price, city)}/mo</div>
                 <div style={{ color: "#666" }}>{p.neighborhood ?? "—"}</div>
                 <div style={{ marginTop: 4 }}>{p.title}</div>
                 {p.url && (

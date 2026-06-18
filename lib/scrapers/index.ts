@@ -1,10 +1,12 @@
 import { sql, and, eq, lt, isNull, inArray } from "drizzle-orm";
+import { CITIES, cityFromParam, contextFromEnv, type CityId } from "@/lib/cities";
 import { extractContact } from "@/lib/contact";
 import { db, schema } from "@/lib/db";
 import { mergeRaw } from "@/lib/dedup";
 import { geocode } from "@/lib/geocode";
 import { neighborhoodFor } from "@/lib/neighborhoods";
 import { craigslist } from "./craigslist";
+import { kijiji } from "./kijiji";
 import { zillow } from "./zillow";
 import { redfin } from "./redfin";
 import { realtor } from "./realtor";
@@ -12,21 +14,26 @@ import { zumper } from "./zumper";
 import { apifyScraper } from "./apify";
 import type { RawListing, Scraper, ScrapeContext, Source } from "./types";
 
-export const ALL_SCRAPERS: Scraper[] = [
+const DIRECT_SCRAPERS: Partial<Record<Source, Scraper>> = {
   craigslist,
+  kijiji,
   // Direct-HTTP zillow stays as a no-op (always 403 from cloud IPs).
   // The real Zillow data comes from apifyScraper("zillow") below.
   zillow,
   redfin,
   realtor,
   zumper,
-  apifyScraper("zillow"),
-  apifyScraper("apartments-com"),
-  apifyScraper("trulia"),
-  apifyScraper("padmapper"),
-  apifyScraper("hotpads"),
-  apifyScraper("facebook"),
-];
+};
+
+export function scrapersFor(city: CityId): Scraper[] {
+  return CITIES[city].sources.flatMap((key) => {
+    if (key.startsWith("apify:")) {
+      return [apifyScraper(key.slice("apify:".length) as Source)];
+    }
+    const scraper = DIRECT_SCRAPERS[key as Source];
+    return scraper ? [scraper] : [];
+  });
+}
 
 export interface ScrapeResult {
   totalRaw: number;
@@ -34,35 +41,36 @@ export interface ScrapeResult {
   newCount: number;
   updatedCount: number;
   unavailableCount: number;
-  perSource: Record<Source, { raw: number; error?: string }>;
+  perSource: Partial<Record<Source, { raw: number; error?: string }>>;
   newListings: Array<{ id: string; title: string; price: number; neighborhood?: string; url: string }>;
 }
 
 /** Sources we trust to mark listings as unavailable when missing.
  * Apify-backed sources are unreliable (token may be unset) — skip them. */
-const RELIABLE_SOURCES: Source[] = ["craigslist", "zillow", "redfin", "realtor", "zumper"];
+const RELIABLE_SOURCES: Source[] = ["craigslist", "kijiji", "zillow", "redfin", "realtor", "zumper"];
 
 /** Grace window — only mark unavailable if we haven't seen it in 3+ days. */
 const UNAVAILABLE_AFTER_MS = 3 * 24 * 60 * 60 * 1000;
 
 export async function runAllScrapers(ctx?: Partial<ScrapeContext>): Promise<ScrapeResult> {
+  const envContext = contextFromEnv(ctx);
   const context: ScrapeContext = {
-    bedrooms: Number(process.env.SEARCH_BEDROOMS ?? 3),
-    maxPrice: Number(process.env.SEARCH_MAX_PRICE ?? 9000),
-    city: process.env.SEARCH_CITY ?? "san-francisco",
+    ...envContext,
     ...ctx,
+    city: cityFromParam(ctx?.city ?? envContext.city),
   };
+  const scrapers = scrapersFor(context.city);
 
   const perSource = {} as ScrapeResult["perSource"];
   const allRaw: RawListing[] = [];
 
   // Run scrapers in parallel; each logs to scrape_runs.
   const results = await Promise.allSettled(
-    ALL_SCRAPERS.map(async (s) => {
+    scrapers.map(async (s) => {
       const start = Date.now();
       const [run] = await db
         .insert(schema.scrapeRuns)
-        .values({ source: s.source })
+        .values({ source: s.source, city: context.city })
         .returning({ id: schema.scrapeRuns.id });
       try {
         const raw = await s.scrape(context);
@@ -91,16 +99,16 @@ export async function runAllScrapers(ctx?: Partial<ScrapeContext>): Promise<Scra
     if (!error && RELIABLE_SOURCES.includes(source)) reliableSucceeded.add(source);
   }
 
-  // Filter: SF only, bedrooms +/- 1 from target, within price
+  // Filter to the active city's bedroom/price constraints.
   const filtered = allRaw.filter((r) => {
     if (r.price > context.maxPrice) return false;
-    if (r.bedrooms != null && r.bedrooms < context.bedrooms) return false;
-    if (r.bedrooms != null && r.bedrooms > context.bedrooms + 2) return false;
+    if (context.bedrooms != null && r.bedrooms != null && r.bedrooms < context.bedrooms) return false;
+    if (context.bedrooms != null && r.bedrooms != null && r.bedrooms > context.bedrooms + 2) return false;
     return true;
   });
 
   // Merge duplicates
-  const merged = mergeRaw(filtered);
+  const merged = mergeRaw(filtered, context.city);
 
   // Geocode any without coords (rate-limited at 1 req/s — keep within function budget)
   let geocoded = 0;
@@ -108,7 +116,7 @@ export async function runAllScrapers(ctx?: Partial<ScrapeContext>): Promise<Scra
   for (const m of merged) {
     if (geocoded >= geocodeBudget) break;
     if ((m.lat == null || m.lng == null) && m.addressLine) {
-      const r = await geocode(m.addressLine);
+      const r = await geocode(m.addressLine, context.city);
       if (r) {
         m.lat = r.lat;
         m.lng = r.lng;
@@ -126,9 +134,10 @@ export async function runAllScrapers(ctx?: Partial<ScrapeContext>): Promise<Scra
 
   for (const m of merged) {
     seenThisRun.add(m.id);
-    const neighborhood = neighborhoodFor(m.lat, m.lng);
+    const neighborhood = neighborhoodFor(m.lat, m.lng, context.city);
     const values = {
       id: m.id,
+      city: context.city,
       title: m.title.slice(0, 500),
       addressLine: m.addressLine ?? null,
       neighborhood: neighborhood ?? null,
@@ -153,6 +162,7 @@ export async function runAllScrapers(ctx?: Partial<ScrapeContext>): Promise<Scra
       .onConflictDoUpdate({
         target: schema.listings.id,
         set: {
+          city: values.city,
           lastSeenAt: new Date(),
           price: sql`LEAST(${schema.listings.price}, EXCLUDED.price)`,
           pricesBySource: values.pricesBySource,
@@ -224,6 +234,7 @@ export async function runAllScrapers(ctx?: Partial<ScrapeContext>): Promise<Scra
       .where(
         and(
           eq(schema.listings.status, "available"),
+          eq(schema.listings.city, context.city),
           lt(schema.listings.lastSeenAt, cutoff)
         )
       )

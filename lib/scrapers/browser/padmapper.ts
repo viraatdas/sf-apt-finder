@@ -40,6 +40,8 @@ const SF_NEIGHBORHOODS = [
 export const padmapper: BrowserScraper = {
   source: "padmapper",
   async scrape(ctx: ScrapeContext, page: Page): Promise<RawListing[]> {
+    if (ctx.city !== "san-francisco" || ctx.bedrooms == null) return [];
+    const targetBeds = ctx.bedrooms;
     const all: RawListing[] = [];
     const seen = new Set<string>();
     const now = new Date().toISOString();
@@ -136,16 +138,16 @@ export const padmapper: BrowserScraper = {
         return out;
       });
 
-      console.log(`[padmapper] ${hood}: ${rows.length} cards (${rows.filter((r) => (r.bedrooms ?? 0) >= ctx.bedrooms || (r.bedrooms_max ?? 0) >= ctx.bedrooms).length} match beds)`);
+      console.log(`[padmapper] ${hood}: ${rows.length} cards (${rows.filter((r) => (r.bedrooms ?? 0) >= targetBeds || (r.bedrooms_max ?? 0) >= targetBeds).length} match beds)`);
 
       for (const r of rows) {
         if (seen.has(r.href)) continue;
         // Filter: needs to match desired bed count (single OR within range)
         const minB = r.bedrooms ?? 0;
         const maxB = r.bedrooms_max ?? minB;
-        if (maxB < ctx.bedrooms) continue;
+        if (maxB < targetBeds) continue;
         // Skip range listings where 3BR is above the high-end of the range
-        if (r.bedrooms_max != null && r.bedrooms_max < ctx.bedrooms) continue;
+        if (r.bedrooms_max != null && r.bedrooms_max < targetBeds) continue;
         if (r.price > ctx.maxPrice) continue;
         seen.add(r.href);
         const slugId = r.href.match(/\/(?:rentals|buildings)\/([^/]+)/)?.[1] ?? r.href;

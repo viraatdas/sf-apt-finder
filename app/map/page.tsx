@@ -1,18 +1,32 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, lte } from "drizzle-orm";
+import { cityFromParam, maxPriceFromParam } from "@/lib/cities";
 import { db, schema } from "@/lib/db";
 import { MapPageClient } from "./client";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export default async function MapPage() {
+type PageProps = {
+  searchParams: Promise<{ city?: string; maxPrice?: string }>;
+};
+
+export default async function MapPage({ searchParams }: PageProps) {
+  const params = await searchParams;
+  const city = cityFromParam(params.city);
+  const maxPrice = maxPriceFromParam(city, params.maxPrice);
   let listings: (typeof schema.listings.$inferSelect)[] = [];
   let decisions: { listingId: string; decision: "yes" | "no" | "maybe" }[] = [];
   try {
     listings = await db
       .select()
       .from(schema.listings)
-      .where(eq(schema.listings.status, "available"))
+      .where(
+        and(
+          eq(schema.listings.status, "available"),
+          eq(schema.listings.city, city),
+          lte(schema.listings.price, maxPrice)
+        )
+      )
       .orderBy(desc(schema.listings.firstSeenAt))
       .limit(500);
     decisions = (await db
@@ -25,5 +39,5 @@ export default async function MapPage() {
 
   const decisionMap: Record<string, "yes" | "no" | "maybe"> = {};
   for (const d of decisions) decisionMap[d.listingId] = d.decision;
-  return <MapPageClient listings={listings} decisions={decisionMap} />;
+  return <MapPageClient listings={listings} decisions={decisionMap} city={city} />;
 }

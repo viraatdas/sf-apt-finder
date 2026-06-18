@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { formatMoney } from "@/lib/utils";
 import type { Listing } from "@/lib/db/schema";
+import type { CityId } from "@/lib/cities";
 
 const ListingMap = dynamic(() => import("./listing-map").then((m) => m.ListingMap), {
   ssr: false,
@@ -37,7 +38,7 @@ export interface CardHandle {
   prevPhoto: () => void;
 }
 
-export function SwipeDeck({ initial }: { initial: Listing[] }) {
+export function SwipeDeck({ initial, city }: { initial: Listing[]; city: CityId }) {
   const [deck, setDeck] = useState(initial);
   const [history, setHistory] = useState<Array<{ listing: Listing; decision: Decision }>>([]);
   const [hoverDecision, setHoverDecision] = useState<Decision | null>(null);
@@ -170,7 +171,7 @@ export function SwipeDeck({ initial }: { initial: Listing[] }) {
     <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(720px,860px)] gap-4 xl:gap-8 max-w-[1900px] mx-auto px-4 py-4 xl:px-6 xl:py-6">
       {/* Map */}
       <div className="h-[40vh] xl:h-[calc(100vh-7rem)] rounded-2xl overflow-hidden border border-ink-100 shadow-sm">
-        <ListingMap pins={pins} focus={focus} />
+        <ListingMap pins={pins} focus={focus} city={city} />
       </div>
 
       {/* Card deck */}
@@ -189,6 +190,7 @@ export function SwipeDeck({ initial }: { initial: Listing[] }) {
                 onPhotoChange={isTop ? setPhotoIdx : () => {}}
                 onDecide={(d) => decide(listing, d, true)}
                 onHoverDecision={isTop ? setHoverDecision : undefined}
+                city={city}
               />
             );
           })}
@@ -266,8 +268,9 @@ const SwipeCard = forwardRef<CardHandle, {
   onPhotoChange: (i: number) => void;
   onDecide: (d: Decision) => void;
   onHoverDecision?: (d: Decision | null) => void;
+  city: CityId;
 }>(function SwipeCard(
-  { listing, isTop, depth, photoIdx, onPhotoChange, onDecide, onHoverDecision },
+  { listing, isTop, depth, photoIdx, onPhotoChange, onDecide, onHoverDecision, city },
   ref
 ) {
   const x = useMotionValue(0);
@@ -452,7 +455,7 @@ const SwipeCard = forwardRef<CardHandle, {
           <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent text-white flex items-end justify-between gap-2 pointer-events-none">
             <div>
               <div className="text-4xl font-bold leading-none drop-shadow-lg">
-                {formatMoney(listing.price)}
+                {formatMoney(listing.price, city)}
               </div>
               <div className="text-xs opacity-80 mt-1">per month</div>
             </div>
@@ -499,7 +502,7 @@ const SwipeCard = forwardRef<CardHandle, {
               <div className="flex flex-wrap gap-1.5 text-xs">
                 {Object.entries(prices).map(([s, p]) => (
                   <span key={s} className="px-2 py-0.5 bg-white rounded border border-ink-100">
-                    {s}: <strong>${p.toLocaleString()}</strong>
+                    {s}: <strong>{formatMoney(p, city)}</strong>
                   </span>
                 ))}
               </div>

@@ -9,6 +9,7 @@ import type { BrowserScraper } from "./index";
 export const hotpads: BrowserScraper = {
   source: "hotpads",
   async scrape(ctx: ScrapeContext, page: Page): Promise<RawListing[]> {
+    if (ctx.city !== "san-francisco" || ctx.bedrooms == null) return [];
     const url = `https://hotpads.com/san-francisco-ca/apartments-for-rent?beds=${ctx.bedrooms}-&maxRent=${ctx.maxPrice}`;
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
     await page.waitForTimeout(5000);
