@@ -77,7 +77,7 @@ export async function sendDailyDigest(
   const { data, error } = await resend.emails.send({
     from: FROM,
     to: recipients,
-    subject: `🏠 ${result.newCount} new ${cityConfig.name} apartments today`,
+    subject: `${cityConfig.name} Apt Finder`,
     html,
     text,
   });
