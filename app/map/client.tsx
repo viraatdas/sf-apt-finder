@@ -58,6 +58,7 @@ export function MapPageClient({
       neighborhood: l.neighborhood,
       decision: decisions[l.id] ?? null,
       url: (l.sources as any)?.[0]?.url,
+      photoUrl: ((l.photoUrls as string[] | null) ?? [])[0],
     }));
 
   return (

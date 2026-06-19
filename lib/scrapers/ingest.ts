@@ -4,7 +4,7 @@ import { db, schema } from "@/lib/db";
 import { mergeRaw } from "@/lib/dedup";
 import { geocode } from "@/lib/geocode";
 import { hasAnySource } from "@/lib/listings/query";
-import { neighborhoodFor } from "@/lib/neighborhoods";
+import { approximateLocationFor, neighborhoodFor } from "@/lib/neighborhoods";
 import type { MergedListing } from "@/lib/dedup";
 import type { RawListing, ScrapeContext, Source } from "@/lib/scrapers/types";
 
@@ -88,8 +88,14 @@ async function geocodeMissingCoordinates(
 ) {
   let geocoded = 0;
   for (const listing of listings) {
-    if (geocoded >= geocodeBudget) break;
     if ((listing.lat != null && listing.lng != null) || !listing.addressLine) continue;
+    const approximate = approximateLocationFor(listing.addressLine, context.city);
+    if (approximate) {
+      listing.lat = approximate.lat;
+      listing.lng = approximate.lng;
+      continue;
+    }
+    if (geocoded >= geocodeBudget) break;
     const result = await geocode(listing.addressLine, context.city);
     if (!result) continue;
     listing.lat = result.lat;

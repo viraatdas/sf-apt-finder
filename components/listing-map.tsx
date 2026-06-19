@@ -24,6 +24,7 @@ interface MapPin {
   decision?: "yes" | "no" | "maybe" | null;
   highlighted?: boolean;
   url?: string;
+  photoUrl?: string;
 }
 
 function PriceIcon({
@@ -122,7 +123,23 @@ export function ListingMap({
             zIndexOffset={p.highlighted ? 1000 : 0}
           >
             <Popup>
-              <div style={{ font: "13px -apple-system,sans-serif", minWidth: 160 }}>
+              <div style={{ font: "13px -apple-system,sans-serif", minWidth: 220, maxWidth: 240 }}>
+                {p.photoUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={p.photoUrl}
+                    alt={normalizeDisplayText(p.title)}
+                    style={{
+                      width: "100%",
+                      height: 120,
+                      objectFit: "cover",
+                      borderRadius: 8,
+                      marginBottom: 8,
+                      display: "block",
+                      background: "#f1f5f9",
+                    }}
+                  />
+                )}
                 <div style={{ fontWeight: 600 }}>{formatMoney(p.price, city)}/mo</div>
                 <div style={{ color: "#666" }}>{normalizeDisplayText(p.neighborhood ?? "Unknown")}</div>
                 <div style={{ marginTop: 4 }}>{normalizeDisplayText(p.title)}</div>

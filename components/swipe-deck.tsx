@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   forwardRef,
   useCallback,
@@ -21,6 +22,7 @@ import {
   ArrowLeft, ArrowRight, ArrowUp, ExternalLink, MapPin, Bed, Bath, Maximize2,
   ChevronLeft, ChevronRight, RotateCcw,
 } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { formatMoney, normalizeDisplayText } from "@/lib/utils";
 import type { Listing } from "@/lib/db/schema";
 import type { CityId } from "@/lib/cities";
@@ -44,6 +46,7 @@ export function SwipeDeck({ initial, city }: { initial: Listing[]; city: CityId 
   const [deck, setDeck] = useState(initial);
   const [history, setHistory] = useState<Array<{ listing: Listing; decision: Decision }>>([]);
   const [hoverDecision, setHoverDecision] = useState<Decision | null>(null);
+  const [swipingId, setSwipingId] = useState<string | null>(null);
   // photoIdx lives here (not inside SwipeCard) so the keyboard handler can
   // update it directly without ref indirection. Reset to 0 on top change.
   const [photoIdx, setPhotoIdx] = useState(0);
@@ -72,10 +75,12 @@ export function SwipeDeck({ initial, city }: { initial: Listing[]; city: CityId 
 
   async function decide(listing: Listing, decision: Decision, skipAnim = false) {
     if (!skipAnim && topRef.current && listing.id === top?.id) {
+      setSwipingId(listing.id);
       await topRef.current.swipe(decision);
     }
     setHistory((h) => [...h, { listing, decision }]);
     setDeck((d) => d.filter((l) => l.id !== listing.id));
+    setSwipingId(null);
     setHoverDecision(null);
     try {
       const userId = userIdRef.current ?? getOrCreateUserId();
@@ -160,6 +165,7 @@ export function SwipeDeck({ initial, city }: { initial: Listing[]; city: CityId 
         decision: null,
         highlighted: l.id === top?.id,
         url: (l.sources as any)?.[0]?.url,
+        photoUrl: ((l.photoUrls as string[] | null) ?? [])[0],
       })),
       ...recent.map((h) => ({
         id: h.listing.id + "_d",
@@ -170,6 +176,7 @@ export function SwipeDeck({ initial, city }: { initial: Listing[]; city: CityId 
         neighborhood: h.listing.neighborhood,
         decision: h.decision,
         url: (h.listing.sources as any)?.[0]?.url,
+        photoUrl: ((h.listing.photoUrls as string[] | null) ?? [])[0],
       })),
     ].filter((p) => p.lat != null && p.lng != null) as any;
   }, [deck, history, top]);
@@ -214,6 +221,7 @@ export function SwipeDeck({ initial, city }: { initial: Listing[]; city: CityId 
                 onPhotoChange={isTop ? setPhotoIdx : () => {}}
                 onDecide={(d) => decide(listing, d, true)}
                 onHoverDecision={isTop ? setHoverDecision : undefined}
+                isRevealing={swipingId === top?.id && !isTop && arr.length - 1 - i === 1}
                 city={city}
               />
             );
@@ -292,9 +300,10 @@ const SwipeCard = forwardRef<CardHandle, {
   onPhotoChange: (i: number) => void;
   onDecide: (d: Decision) => void;
   onHoverDecision?: (d: Decision | null) => void;
+  isRevealing: boolean;
   city: CityId;
 }>(function SwipeCard(
-  { listing, isTop, depth, photoIdx, onPhotoChange, onDecide, onHoverDecision, city },
+  { listing, isTop, depth, photoIdx, onPhotoChange, onDecide, onHoverDecision, isRevealing, city },
   ref
 ) {
   const x = useMotionValue(0);
@@ -306,6 +315,14 @@ const SwipeCard = forwardRef<CardHandle, {
   const photos = (listing.photoUrls as string[] | null) ?? [];
   const sources = (listing.sources as any[] | null) ?? [];
   const prices = (listing.pricesBySource as Record<string, number> | null) ?? {};
+  const searchParams = useSearchParams();
+
+  function sourceFilterHref(source: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("city", city);
+    params.set("source", source);
+    return `/?${params.toString()}`;
+  }
 
   useImperativeHandle(
     ref,
@@ -369,18 +386,28 @@ const SwipeCard = forwardRef<CardHandle, {
         x: isTop ? x : 0,
         y: isTop ? y : 0,
         rotate: isTop ? rotate : 0,
-        scale: 1 - depth * 0.04,
         translateY: depth * 12,
         zIndex: 100 - depth,
       }}
-      initial={{ opacity: 0, scale: 0.88, y: 60 }}
-      animate={{ opacity: 1, scale: 1 - depth * 0.04 }}
-      transition={{ type: "spring", stiffness: 340, damping: 30, mass: 0.9 }}
+      initial={{ opacity: 0, scale: 0.88, y: 60, filter: "blur(10px)" }}
+      animate={{
+        opacity: isTop || isRevealing ? 1 : 0.82,
+        scale: isRevealing ? 0.995 : 1 - depth * 0.04,
+        filter: isTop || isRevealing ? "blur(0px)" : `blur(${Math.min(depth * 3, 7)}px)`,
+      }}
+      transition={{
+        type: "spring",
+        stiffness: isRevealing ? 420 : 340,
+        damping: isRevealing ? 34 : 30,
+        mass: 0.9,
+        filter: { duration: 0.34 },
+        opacity: { duration: 0.22 },
+      }}
       exit={{
         opacity: 0,
         transition: { duration: 0.15, delay: 0.42 },
       }}
-      className="absolute inset-0 bg-white rounded-3xl border border-ink-100 overflow-hidden cursor-grab active:cursor-grabbing shadow-2xl"
+      className="absolute inset-0 bg-white rounded-3xl border border-ink-100 overflow-hidden cursor-grab active:cursor-grabbing shadow-2xl will-change-transform"
     >
       <div className="grid grid-rows-[55%_45%] h-full">
         {/* Photo area: tap left half to go back, right half to advance */}
@@ -569,17 +596,35 @@ const SwipeCard = forwardRef<CardHandle, {
 
           <div className="flex gap-1.5 flex-wrap">
             {sources.map((s, i) => (
-              <a
+              <span
                 key={i}
-                href={s.url}
-                target="_blank"
-                rel="noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className="text-xs px-2.5 py-1 bg-ink-100 hover:bg-ink-100/70 rounded-full inline-flex items-center gap-1"
+                className="inline-flex items-center overflow-hidden rounded-full bg-ink-100 text-xs"
               >
-                {sourceLabel(s.source)}
-                <ExternalLink className="w-3 h-3" />
-              </a>
+                {isTop ? (
+                  <>
+                    <Link
+                      href={sourceFilterHref(s.source)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="px-2.5 py-1 font-medium hover:bg-ink-100/70"
+                      title={`Filter to ${sourceLabel(s.source)}`}
+                    >
+                      {sourceLabel(s.source)}
+                    </Link>
+                    <a
+                      href={s.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label={`Open ${sourceLabel(s.source)} listing`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="px-2 py-1 border-l border-white/80 hover:bg-ink-100/70"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </>
+                ) : (
+                  <span className="px-2.5 py-1 font-medium">{sourceLabel(s.source)}</span>
+                )}
+              </span>
             ))}
           </div>
         </div>

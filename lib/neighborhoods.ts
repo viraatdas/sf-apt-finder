@@ -80,3 +80,49 @@ export function neighborhoodFor(
   }
   return "Other";
 }
+
+const VANCOUVER_LOCATION_ALIASES: Record<string, { lat: number; lng: number }> = {
+  "rupert station": { lat: 49.2608, lng: -123.0329 },
+  "rupert skytrain": { lat: 49.2608, lng: -123.0329 },
+  "renfrew station": { lat: 49.2589, lng: -123.0453 },
+  "commercial broadway": { lat: 49.2626, lng: -123.0693 },
+  "commercial drive": centerOf("Commercial Drive"),
+  "canada line": { lat: 49.2485, lng: -123.1151 },
+  cambie: { lat: 49.2485, lng: -123.1151 },
+  quilchena: { lat: 49.245, lng: -123.155 },
+  kits: centerOf("Kitsilano"),
+  kitsilano: centerOf("Kitsilano"),
+  "mount pleasant": centerOf("Mount Pleasant"),
+  strathcona: centerOf("Strathcona"),
+  fairview: centerOf("Fairview"),
+  yaletown: centerOf("Yaletown"),
+  "west end": centerOf("West End"),
+  downtown: centerOf("Downtown"),
+  marpole: centerOf("Marpole"),
+  dunbar: centerOf("Dunbar"),
+  kerrisdale: centerOf("Kerrisdale"),
+  "point grey": centerOf("Point Grey"),
+};
+
+export function approximateLocationFor(
+  text: string | null | undefined,
+  city: "san-francisco" | "vancouver" = "san-francisco"
+): { lat: number; lng: number } | undefined {
+  if (!text || city !== "vancouver") return undefined;
+  const normalized = text.toLowerCase().replace(/[^\w\s-]/g, " ").replace(/\s+/g, " ").trim();
+  if (!normalized || /^city of vancouver$/.test(normalized)) return undefined;
+  for (const [key, coords] of Object.entries(VANCOUVER_LOCATION_ALIASES)) {
+    if (normalized.includes(key)) return coords;
+  }
+  return undefined;
+}
+
+function centerOf(name: string): { lat: number; lng: number } {
+  const neighborhood = VANCOUVER_NEIGHBORHOODS.find((n) => n.name === name);
+  if (!neighborhood) return { lat: 49.2827, lng: -123.1207 };
+  const [minLng, minLat, maxLng, maxLat] = neighborhood.bbox;
+  return {
+    lat: (minLat + maxLat) / 2,
+    lng: (minLng + maxLng) / 2,
+  };
+}

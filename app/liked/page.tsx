@@ -60,6 +60,7 @@ export default async function LikedPage({ searchParams }: PageProps) {
             emoji="❤️"
             rows={groups.yes}
             city={city}
+            maxPrice={maxPrice}
             color="text-accent-yes"
             accent="border-accent-yes/50"
           />
@@ -68,6 +69,7 @@ export default async function LikedPage({ searchParams }: PageProps) {
             emoji="🤔"
             rows={groups.maybe}
             city={city}
+            maxPrice={maxPrice}
             color="text-amber-600"
             accent="border-accent-maybe/50"
           />
@@ -76,6 +78,7 @@ export default async function LikedPage({ searchParams }: PageProps) {
             emoji="🚫"
             rows={groups.no}
             city={city}
+            maxPrice={maxPrice}
             color="text-accent-no"
             accent="border-accent-no/30"
           />
@@ -92,6 +95,7 @@ function Column({
   accent,
   rows,
   city,
+  maxPrice,
 }: {
   title: string;
   emoji: string;
@@ -99,6 +103,7 @@ function Column({
   accent: string;
   rows: LikedListingRow[];
   city: CityId;
+  maxPrice: number;
 }) {
   return (
     <div>
@@ -113,20 +118,37 @@ function Column({
           </div>
         )}
         {rows.map((r) => (
-          <ListingCard key={r.listing.id} row={r} accent={accent} city={city} />
+          <ListingCard key={r.listing.id} row={r} accent={accent} city={city} maxPrice={maxPrice} />
         ))}
       </div>
     </div>
   );
 }
 
-function ListingCard({ row, accent, city }: { row: LikedListingRow; accent: string; city: CityId }) {
+function ListingCard({
+  row,
+  accent,
+  city,
+  maxPrice,
+}: {
+  row: LikedListingRow;
+  accent: string;
+  city: CityId;
+  maxPrice: number;
+}) {
   const { listing } = row;
   const photos = (listing.photoUrls as string[] | null) ?? [];
   const sources = (listing.sources as any[] | null) ?? [];
-  const primaryUrl = sources[0]?.url;
   const stale = listing.status === "unavailable";
   const photo = photos[0];
+
+  function sourceFilterHref(source: string) {
+    const params = new URLSearchParams();
+    params.set("city", city);
+    params.set("maxPrice", String(maxPrice));
+    params.set("source", source);
+    return `/liked?${params.toString()}`;
+  }
 
   return (
     <div
@@ -195,14 +217,28 @@ function ListingCard({ row, accent, city }: { row: LikedListingRow; accent: stri
             </span>
           )}
         </div>
-        {primaryUrl && (
-          <Link
-            href={primaryUrl}
-            target="_blank"
-            className="text-xs px-3 py-1.5 bg-ink-900 text-white rounded-full inline-flex items-center gap-1.5 hover:bg-ink-900/85"
-          >
-            View on {sourceLabel(sources[0]?.source)} <ExternalLink className="w-3 h-3" />
-          </Link>
+        {sources.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {sources.map((s, i) => (
+              <span key={i} className="inline-flex items-center overflow-hidden rounded-full bg-ink-100 text-xs">
+                <Link
+                  href={sourceFilterHref(s.source)}
+                  className="px-2.5 py-1 font-medium hover:bg-ink-100/70"
+                  title={`Filter to ${sourceLabel(s.source)}`}
+                >
+                  {sourceLabel(s.source)}
+                </Link>
+                <Link
+                  href={s.url}
+                  target="_blank"
+                  aria-label={`Open ${sourceLabel(s.source)} listing`}
+                  className="px-2 py-1 border-l border-white/80 hover:bg-ink-100/70"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                </Link>
+              </span>
+            ))}
+          </div>
         )}
       </div>
     </div>

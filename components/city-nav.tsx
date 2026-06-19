@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Mail, SlidersHorizontal } from "lucide-react";
 import { moveFocusWithArrowKeys } from "@/components/arrow-key-nav";
 import { CITIES, CITY_IDS, cityFromParam, maxPriceFromParam, type CityId } from "@/lib/cities";
@@ -29,7 +29,7 @@ export function CityNav() {
 
   const baseParams = useMemo(() => new URLSearchParams(searchParams.toString()), [searchParams]);
 
-  function hrefFor(href: string, nextCity: CityId = city, nextMaxPrice = maxPrice) {
+  const hrefFor = useCallback((href: string, nextCity: CityId = city, nextMaxPrice = maxPrice) => {
     const params = new URLSearchParams(baseParams.toString());
     params.set("city", nextCity);
     if (nextMaxPrice === CITIES[nextCity].defaultMaxPrice) {
@@ -39,21 +39,19 @@ export function CityNav() {
     }
     const query = params.toString();
     return query ? `${href}?${query}` : href;
-  }
+  }, [baseParams, city, maxPrice]);
 
   function changeCity(nextCity: CityId) {
     router.push(hrefFor(pathname, nextCity, CITIES[nextCity].defaultMaxPrice));
   }
 
-  function applyPrice(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    const parsed = Number(formData.get("maxPrice"));
-    const nextMaxPrice = Number.isFinite(parsed) && parsed > 0
-      ? Math.round(parsed / 100) * 100
-      : CITIES[city].defaultMaxPrice;
-    router.push(hrefFor(pathname, city, nextMaxPrice));
-  }
+  useEffect(() => {
+    if (priceInput === maxPrice) return;
+    const timer = window.setTimeout(() => {
+      router.replace(hrefFor(pathname, city, priceInput), { scroll: false });
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [city, hrefFor, maxPrice, pathname, priceInput, router]);
 
   return (
     <nav
@@ -73,8 +71,7 @@ export function CityNav() {
           </option>
         ))}
       </select>
-      <form
-        onSubmit={applyPrice}
+      <div
         className="flex items-center gap-2 rounded-full border border-ink-100 bg-white px-3 py-1.5"
       >
         <SlidersHorizontal className="h-4 w-4 text-ink-900/45" aria-hidden="true" />
@@ -92,18 +89,11 @@ export function CityNav() {
             onChange={(event) => setPriceInput(Number(event.target.value))}
             className="h-2 w-28 accent-ink-900"
           />
-          <output className="w-16 text-right text-sm font-semibold tabular-nums">
+          <output className="w-16 text-right text-sm font-semibold tabular-nums" aria-live="polite">
             ${priceInput.toLocaleString()}
           </output>
         </label>
-        <button
-          type="submit"
-          data-arrow-nav-item
-          className="h-7 px-3 rounded-full bg-ink-900 text-white text-xs font-semibold hover:bg-ink-900/85"
-        >
-          Apply
-        </button>
-      </form>
+      </div>
       {NAV_ITEMS.map((item) => (
         <Link
           key={item.href}
