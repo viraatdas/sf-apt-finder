@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Mail, SlidersHorizontal } from "lucide-react";
 import { moveFocusWithArrowKeys } from "@/components/arrow-key-nav";
 import { CITIES, CITY_IDS, cityFromParam, maxPriceFromParam, type CityId } from "@/lib/cities";
@@ -22,6 +22,7 @@ export function CityNav() {
   const priceMin = 500;
   const priceMax = CITIES[city].defaultMaxPrice;
   const [priceInput, setPriceInput] = useState(maxPrice);
+  const priceInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     setPriceInput(maxPrice);
@@ -53,6 +54,18 @@ export function CityNav() {
     return () => window.clearTimeout(timer);
   }, [city, hrefFor, maxPrice, pathname, priceInput, router]);
 
+  useEffect(() => {
+    const input = priceInputRef.current;
+    if (!input) return;
+    const syncPrice = () => setPriceInput(Number(input.value));
+    input.addEventListener("input", syncPrice);
+    input.addEventListener("change", syncPrice);
+    return () => {
+      input.removeEventListener("input", syncPrice);
+      input.removeEventListener("change", syncPrice);
+    };
+  }, []);
+
   return (
     <nav
       aria-label="Primary"
@@ -78,6 +91,7 @@ export function CityNav() {
         <label className="flex items-center gap-2">
           <span className="text-xs font-semibold text-ink-900/60 whitespace-nowrap">Max price</span>
           <input
+            ref={priceInputRef}
             aria-label="Max price"
             name="maxPrice"
             type="range"

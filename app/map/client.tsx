@@ -49,17 +49,21 @@ export function MapPageClient({
 
   const pins = filtered
     .filter((l) => l.lat != null && l.lng != null)
-    .map((l) => ({
-      id: l.id,
-      lat: l.lat!,
-      lng: l.lng!,
-      title: normalizeDisplayText(l.title),
-      price: l.price ?? 0,
-      neighborhood: l.neighborhood,
-      decision: decisions[l.id] ?? null,
-      url: (l.sources as any)?.[0]?.url,
-      photoUrl: ((l.photoUrls as string[] | null) ?? [])[0],
-    }));
+    .map((l) => {
+      const photoUrl = firstPhotoUrl(l.photoUrls);
+      return {
+        id: l.id,
+        lat: l.lat!,
+        lng: l.lng!,
+        title: normalizeDisplayText(l.title),
+        price: l.price ?? 0,
+        neighborhood: l.neighborhood,
+        decision: decisions[l.id] ?? null,
+        url: (l.sources as any)?.[0]?.url,
+        photoUrl,
+      };
+    })
+    .sort((a, b) => Number(Boolean(b.photoUrl)) - Number(Boolean(a.photoUrl)));
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4 max-w-[1600px] mx-auto p-4 lg:p-6">
@@ -133,4 +137,15 @@ export function MapPageClient({
       </div>
     </div>
   );
+}
+
+function firstPhotoUrl(value: unknown): string | undefined {
+  if (Array.isArray(value)) return typeof value[0] === "string" ? value[0] : undefined;
+  if (typeof value !== "string") return undefined;
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) && typeof parsed[0] === "string" ? parsed[0] : undefined;
+  } catch {
+    return value.startsWith("http") ? value : undefined;
+  }
 }
