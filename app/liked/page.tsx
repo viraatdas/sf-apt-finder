@@ -1,4 +1,4 @@
-import { and, desc, eq, lte } from "drizzle-orm";
+import { and, desc, eq, lte, sql } from "drizzle-orm";
 import Link from "next/link";
 import { Bed, Bath, Maximize2, MapPin, ExternalLink } from "lucide-react";
 import { cityFromParam, maxPriceFromParam, type CityId } from "@/lib/cities";
@@ -25,7 +25,20 @@ export default async function LikedPage({ searchParams }: PageProps) {
   const city = cityFromParam(params.city);
   const maxPrice = maxPriceFromParam(city, params.maxPrice);
   let rows: Row[] = [];
+  let matchingCount = 0;
   try {
+    const [matching] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(schema.listings)
+      .where(
+        and(
+          eq(schema.listings.status, "available"),
+          eq(schema.listings.city, city),
+          lte(schema.listings.price, maxPrice)
+        )
+      );
+    matchingCount = matching?.count ?? 0;
+
     rows = (await db
       .select({
         listing: schema.listings,
@@ -54,7 +67,7 @@ export default async function LikedPage({ searchParams }: PageProps) {
 
   return (
     <>
-      <SourceStrip city={city} className="pt-4" />
+      <SourceStrip city={city} matchingCount={matchingCount} maxPrice={maxPrice} className="pt-4" />
       <div className="max-w-[1900px] mx-auto p-4 lg:p-8">
         <h1 className="font-display text-3xl mb-2">Shortlist</h1>
         <p className="text-sm text-ink-900/60 mb-8">

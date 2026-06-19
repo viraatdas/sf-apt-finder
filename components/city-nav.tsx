@@ -63,16 +63,19 @@ export function CityNav() {
         ))}
       </select>
       <form onSubmit={applyPrice} className="flex items-center gap-1">
-        <input
-          aria-label="Max price"
-          type="number"
-          min={1}
-          step={100}
-          inputMode="numeric"
-          value={priceInput}
-          onChange={(event) => setPriceInput(event.target.value)}
-          className="h-9 w-24 rounded-full border border-ink-100 bg-white px-3 text-sm font-medium tabular-nums hover:bg-ink-50"
-        />
+        <label className="flex items-center gap-1.5 rounded-full border border-ink-100 bg-white pl-3 pr-2 h-9 hover:bg-ink-50">
+          <span className="text-xs font-semibold text-ink-900/55">Max price</span>
+          <input
+            aria-label="Max price"
+            type="number"
+            min={1}
+            step={100}
+            inputMode="numeric"
+            value={priceInput}
+            onChange={(event) => setPriceInput(event.target.value)}
+            className="h-7 w-20 bg-transparent text-sm font-medium tabular-nums outline-none"
+          />
+        </label>
         <button
           type="submit"
           className="h-9 px-3 rounded-full bg-ink-900 text-white text-sm font-medium hover:bg-ink-900/85"

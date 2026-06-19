@@ -14,7 +14,7 @@ export const SOURCE_INFO: Record<Source, { label: string; note?: string }> = {
   zumper: { label: "Zumper" },
   livrent: { label: "liv.rent" },
   "rentals-ca": { label: "rentals.ca" },
-  facebook: { label: "Facebook Marketplace", note: "best effort" },
+  facebook: { label: "Facebook Marketplace" },
 };
 
 export function sourceFromKey(key: ScraperKey): Source {

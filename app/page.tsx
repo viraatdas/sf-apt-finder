@@ -1,4 +1,4 @@
-import { and, desc, eq, lte, notInArray } from "drizzle-orm";
+import { and, desc, eq, lte, notInArray, sql } from "drizzle-orm";
 import type { Metadata } from "next";
 import { CITIES, cityFromParam, maxPriceFromParam } from "@/lib/cities";
 import { db, schema } from "@/lib/db";
@@ -28,7 +28,20 @@ export default async function HomePage({ searchParams }: PageProps) {
   const maxPrice = maxPriceFromParam(city, params.maxPrice);
   // Pull undecided, available listings for the default "household" user.
   let listings: typeof schema.listings.$inferSelect[] = [];
+  let matchingCount = 0;
   try {
+    const [matching] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(schema.listings)
+      .where(
+        and(
+          eq(schema.listings.status, "available"),
+          eq(schema.listings.city, city),
+          lte(schema.listings.price, maxPrice)
+        )
+      );
+    matchingCount = matching?.count ?? 0;
+
     const decided = await db
       .select({ id: schema.decisions.listingId })
       .from(schema.decisions)
@@ -55,7 +68,7 @@ export default async function HomePage({ searchParams }: PageProps) {
   if (listings.length === 0) {
     return (
       <>
-        <SourceStrip city={city} className="pt-4" />
+        <SourceStrip city={city} matchingCount={matchingCount} maxPrice={maxPrice} className="pt-4" />
         <div className="flex flex-col items-center justify-center min-h-[70vh] text-center px-6">
           <div className="text-5xl mb-4">🏚️</div>
           <h1 className="text-2xl font-display mb-2">No listings yet</h1>
@@ -75,7 +88,7 @@ export default async function HomePage({ searchParams }: PageProps) {
 
   return (
     <>
-      <SourceStrip city={city} className="pt-4" />
+      <SourceStrip city={city} matchingCount={matchingCount} maxPrice={maxPrice} className="pt-4" />
       <SwipeDeck initial={listings} city={city} />
     </>
   );

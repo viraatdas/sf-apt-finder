@@ -1,4 +1,4 @@
-import { and, desc, eq, lte } from "drizzle-orm";
+import { and, desc, eq, lte, sql } from "drizzle-orm";
 import { cityFromParam, maxPriceFromParam } from "@/lib/cities";
 import { db, schema } from "@/lib/db";
 import { SourceStrip } from "@/components/source-strip";
@@ -17,7 +17,20 @@ export default async function MapPage({ searchParams }: PageProps) {
   const maxPrice = maxPriceFromParam(city, params.maxPrice);
   let listings: (typeof schema.listings.$inferSelect)[] = [];
   let decisions: { listingId: string; decision: "yes" | "no" | "maybe" }[] = [];
+  let matchingCount = 0;
   try {
+    const [matching] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(schema.listings)
+      .where(
+        and(
+          eq(schema.listings.status, "available"),
+          eq(schema.listings.city, city),
+          lte(schema.listings.price, maxPrice)
+        )
+      );
+    matchingCount = matching?.count ?? 0;
+
     listings = await db
       .select()
       .from(schema.listings)
@@ -42,7 +55,7 @@ export default async function MapPage({ searchParams }: PageProps) {
   for (const d of decisions) decisionMap[d.listingId] = d.decision;
   return (
     <>
-      <SourceStrip city={city} className="pt-4" />
+      <SourceStrip city={city} matchingCount={matchingCount} maxPrice={maxPrice} className="pt-4" />
       <MapPageClient listings={listings} decisions={decisionMap} city={city} />
     </>
   );

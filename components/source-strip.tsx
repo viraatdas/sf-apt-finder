@@ -1,7 +1,18 @@
 import type { CityId } from "@/lib/cities";
 import { configuredSourcesForCity } from "@/lib/sources";
+import { formatMoney } from "@/lib/utils";
 
-export function SourceStrip({ city, className = "" }: { city: CityId; className?: string }) {
+export function SourceStrip({
+  city,
+  className = "",
+  matchingCount,
+  maxPrice,
+}: {
+  city: CityId;
+  className?: string;
+  matchingCount?: number;
+  maxPrice?: number;
+}) {
   const sources = configuredSourcesForCity(city);
 
   return (
@@ -10,6 +21,11 @@ export function SourceStrip({ city, className = "" }: { city: CityId; className?
       className={`max-w-[1900px] mx-auto px-4 xl:px-6 ${className}`}
     >
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-ink-100 bg-white px-3 py-2 text-xs text-ink-900/60 shadow-sm">
+        {matchingCount != null && maxPrice != null && (
+          <span className="mr-1 font-semibold text-ink-900">
+            {matchingCount.toLocaleString()} current listings under {formatMoney(maxPrice, city)}
+          </span>
+        )}
         <span className="font-semibold text-ink-900">Sources</span>
         {sources.map((source) => (
           <span

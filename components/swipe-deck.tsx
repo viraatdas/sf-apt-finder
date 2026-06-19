@@ -250,7 +250,7 @@ function DeckCounter({
   return (
     <div className="absolute top-3 right-3 z-[130] flex items-center gap-2 text-xs font-medium">
       <div className="px-2.5 py-1 rounded-full bg-white/90 backdrop-blur border border-ink-100 shadow-sm">
-        {remaining} left
+        {remaining} in deck
       </div>
       <div className="px-2.5 py-1 rounded-full bg-white/90 backdrop-blur border border-ink-100 shadow-sm flex gap-2">
         <span className="text-accent-yes">♥ {yes}</span>
