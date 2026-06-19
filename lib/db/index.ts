@@ -9,7 +9,6 @@ if (!url) {
 }
 
 declare global {
-  // eslint-disable-next-line no-var
   var __pg: ReturnType<typeof postgres> | undefined;
 }
 

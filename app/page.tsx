@@ -62,7 +62,7 @@ export default async function HomePage({ searchParams }: PageProps) {
             from your terminal with the <code>CRON_SECRET</code>.
           </p>
           <code className="text-xs bg-ink-100 px-3 py-2 rounded-lg">
-            curl -H "Authorization: Bearer $CRON_SECRET" https://your-domain/api/cron
+            curl -H &quot;Authorization: Bearer $CRON_SECRET&quot; https://your-domain/api/cron
           </code>
         </div>
       </>

@@ -2,7 +2,6 @@ import Link from "next/link";
 import { Bed, Bath, Maximize2, MapPin, ExternalLink } from "lucide-react";
 import { cityFromParam, maxPriceFromParam, type CityId } from "@/lib/cities";
 import { SourceStrip } from "@/components/source-strip";
-import { schema } from "@/lib/db";
 import { sourceFromParam, sourceLabel } from "@/lib/sources";
 import { formatMoney, normalizeDisplayText } from "@/lib/utils";
 import { countMatchingListings, listLikedListings, type LikedListingRow } from "@/lib/listings/query";

@@ -187,7 +187,7 @@ export function SwipeDeck({ initial, city }: { initial: Listing[]; city: CityId 
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
         <div className="text-5xl mb-4">🎉</div>
-        <h2 className="text-2xl font-display mb-2">You're all caught up</h2>
+        <h2 className="text-2xl font-display mb-2">You&apos;re all caught up</h2>
         <p className="text-ink-900/60 mb-6">No more listings to review. New ones land daily at 7:05 AM.</p>
         {history.length > 0 && (
           <button onClick={undo} className="px-4 py-2 rounded-full bg-ink-100 hover:bg-ink-100/80">
