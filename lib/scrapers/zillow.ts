@@ -2,7 +2,7 @@ import type { RawListing, Scraper, ScrapeContext } from "./types";
 
 /**
  * Zillow rentals search via the async JSON endpoint.
- * Frequently blocked from serverless IPs — if it 403s we just return [].
+ * Frequently blocked from serverless IPs. If it 403s we just return [].
  */
 export const zillow: Scraper = {
   source: "zillow",

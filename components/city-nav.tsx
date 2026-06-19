@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Mail, SlidersHorizontal } from "lucide-react";
+import { moveFocusWithArrowKeys } from "@/components/arrow-key-nav";
 import { CITIES, CITY_IDS, cityFromParam, maxPriceFromParam, type CityId } from "@/lib/cities";
 
 const NAV_ITEMS = [
@@ -17,10 +19,12 @@ export function CityNav() {
   const searchParams = useSearchParams();
   const city = cityFromParam(searchParams.get("city"));
   const maxPrice = maxPriceFromParam(city, searchParams.get("maxPrice"));
-  const [priceInput, setPriceInput] = useState(String(maxPrice));
+  const priceMin = 500;
+  const priceMax = CITIES[city].defaultMaxPrice;
+  const [priceInput, setPriceInput] = useState(maxPrice);
 
   useEffect(() => {
-    setPriceInput(String(maxPrice));
+    setPriceInput(maxPrice);
   }, [maxPrice]);
 
   const baseParams = useMemo(() => new URLSearchParams(searchParams.toString()), [searchParams]);
@@ -43,13 +47,20 @@ export function CityNav() {
 
   function applyPrice(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const parsed = Number(priceInput);
-    const nextMaxPrice = Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : CITIES[city].defaultMaxPrice;
+    const formData = new FormData(event.currentTarget);
+    const parsed = Number(formData.get("maxPrice"));
+    const nextMaxPrice = Number.isFinite(parsed) && parsed > 0
+      ? Math.round(parsed / 100) * 100
+      : CITIES[city].defaultMaxPrice;
     router.push(hrefFor(pathname, city, nextMaxPrice));
   }
 
   return (
-    <nav className="flex flex-wrap gap-1.5 text-sm items-center justify-end">
+    <nav
+      aria-label="Primary"
+      onKeyDown={moveFocusWithArrowKeys}
+      className="flex flex-wrap gap-1.5 text-sm items-center justify-end"
+    >
       <select
         aria-label="City"
         value={city}
@@ -62,37 +73,56 @@ export function CityNav() {
           </option>
         ))}
       </select>
-      <form onSubmit={applyPrice} className="flex items-center gap-1">
-        <label className="flex items-center gap-1.5 rounded-full border border-ink-100 bg-white pl-3 pr-2 h-9 hover:bg-ink-50">
-          <span className="text-xs font-semibold text-ink-900/55">Max price</span>
+      <form
+        onSubmit={applyPrice}
+        className="flex items-center gap-2 rounded-full border border-ink-100 bg-white px-3 py-1.5"
+      >
+        <SlidersHorizontal className="h-4 w-4 text-ink-900/45" aria-hidden="true" />
+        <label className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-ink-900/60 whitespace-nowrap">Max price</span>
           <input
             aria-label="Max price"
-            type="number"
-            min={1}
+            name="maxPrice"
+            type="range"
+            min={priceMin}
+            max={priceMax}
             step={100}
-            inputMode="numeric"
             value={priceInput}
-            onChange={(event) => setPriceInput(event.target.value)}
-            className="h-7 w-20 bg-transparent text-sm font-medium tabular-nums outline-none"
+            onInput={(event) => setPriceInput(Number(event.currentTarget.value))}
+            onChange={(event) => setPriceInput(Number(event.target.value))}
+            className="h-2 w-28 accent-ink-900"
           />
+          <output className="w-16 text-right text-sm font-semibold tabular-nums">
+            ${priceInput.toLocaleString()}
+          </output>
         </label>
         <button
           type="submit"
-          className="h-9 px-3 rounded-full bg-ink-900 text-white text-sm font-medium hover:bg-ink-900/85"
+          data-arrow-nav-item
+          className="h-7 px-3 rounded-full bg-ink-900 text-white text-xs font-semibold hover:bg-ink-900/85"
         >
           Apply
         </button>
       </form>
       {NAV_ITEMS.map((item) => (
-        <Link key={item.href} href={hrefFor(item.href)} className="px-3 py-1.5 rounded-full hover:bg-ink-100">
+        <Link
+          key={item.href}
+          href={hrefFor(item.href)}
+          data-arrow-nav-item
+          className="px-3 py-1.5 rounded-full hover:bg-ink-100 focus:outline-none focus:ring-2 focus:ring-ink-900/20"
+        >
           {item.label}
         </Link>
       ))}
       <a
         href="mailto:viraat@exla.ai?subject=apt-tinder"
-        className="ml-1 px-3 py-1.5 rounded-full bg-accent-yes/10 text-accent-yes hover:bg-accent-yes/20 font-medium"
+        data-arrow-nav-item
+        aria-label="Email viraat@exla.ai"
+        title="viraat@exla.ai"
+        className="ml-1 px-3 py-1.5 rounded-full bg-accent-yes/10 text-accent-yes hover:bg-accent-yes/20 font-medium inline-flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-accent-yes/30"
       >
-        Interested? viraat@exla.ai
+        <Mail className="h-3.5 w-3.5" aria-hidden="true" />
+        Contact
       </a>
     </nav>
   );

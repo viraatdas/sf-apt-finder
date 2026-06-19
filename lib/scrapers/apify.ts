@@ -1,15 +1,17 @@
 import type { RawListing, Scraper, ScrapeContext, Source } from "./types";
 
 /**
- * Apify adapter — verified actor IDs as of May 2026.
+ * Apify adapter. Actor IDs verified as of May 2026.
  *
  * Vercel Hobby caps functions at 60s, so we pass a per-actor sync timeout to
  * Apify; we get back whatever the actor finished within that window.
  */
 
-const APIFY_TIMEOUT_SECONDS = 120;
+const APIFY_TIMEOUT_SECONDS = 180;
 const APIFY_MEMORY_MB = 512;
 const MIN_PADMAPPER_RENT = 500;
+const DEFAULT_PADMAPPER_MAX_ITEMS = 10;
+const DEFAULT_FACEBOOK_MAX_ITEMS = 50;
 
 interface ApifyActor {
   source: Source;
@@ -29,7 +31,7 @@ type NormalizedFloorplan = {
 
 const SEARCH_URLS = {
   /** Zillow requires searchQueryState with their SHORT filter keys (fr/fsba/beds/price)
-   * for rentals — not the long names. Long names silently return 0 results. */
+   * for rentals, not the long names. Long names silently return 0 results. */
   zillow: (city: ScrapeContext["city"], beds: number, maxPrice: number) => {
     if (city !== "san-francisco") return "";
     const state = {
@@ -94,7 +96,7 @@ const APIFY_PROXY_BY_CITY = {
 } as const;
 
 const ACTORS: ApifyActor[] = [
-  // Zillow via igolaizola/zillow-scraper-ppe — returns full photo galleries.
+  // Zillow via igolaizola/zillow-scraper-ppe returns full photo galleries.
   // Pay-per-result: ~$0.0009 per listing on BRONZE plan. ~150 SF listings = ~$0.14/run.
   {
     source: "zillow",
@@ -137,7 +139,7 @@ const ACTORS: ApifyActor[] = [
       };
     },
   },
-  // Apartments.com — set includeDetails:true to get full photo gallery per listing.
+  // Apartments.com: set includeDetails:true to get full photo gallery per listing.
   {
     source: "apartments-com",
     actorId: "pro100chok~apartments-scraper-usage",
@@ -154,19 +156,19 @@ const ACTORS: ApifyActor[] = [
   },
   // Trulia & Realtor.com require a paid Apify actor (HTTP 402 on free plan).
   // To enable: upgrade Apify or swap to a free-plan-friendly scraper.
-  // Padmapper — pay-per-result actor; maxChargedResults caps cost on free credit.
+  // Padmapper pay-per-result actor. maxChargedResults caps daily spend.
   {
     source: "padmapper",
     actorId: "lexis-solutions~padmapper-scraper",
     buildInput: (ctx) => ({
       startUrls: [{ url: SEARCH_URLS.padmapper(ctx.city) }],
-      maxItems: 5,
-      maxChargedResults: 5,
+      maxItems: envInt("APIFY_PADMAPPER_MAX_ITEMS", DEFAULT_PADMAPPER_MAX_ITEMS),
+      maxChargedResults: envInt("APIFY_PADMAPPER_MAX_ITEMS", DEFAULT_PADMAPPER_MAX_ITEMS),
       proxyConfiguration: APIFY_PROXY_BY_CITY[ctx.city],
     }),
     normalize: (r, ctx) => padmapperNormalize(r, ctx),
   },
-  // HotPads — pay-per-result
+  // HotPads pay-per-result.
   {
     source: "hotpads",
     actorId: "benthepythondev~hotpads-rental-scraper",
@@ -182,7 +184,7 @@ const ACTORS: ApifyActor[] = [
     }),
     normalize: (r, ctx) => genericNormalize(r, "hotpads", ctx),
   },
-  // Zumper — pay-per-result
+  // Zumper pay-per-result.
   {
     source: "zumper",
     actorId: "benthepythondev~zumper-rental-scraper",
@@ -198,7 +200,7 @@ const ACTORS: ApifyActor[] = [
     }),
     normalize: (r, ctx) => genericNormalize(r, "zumper", ctx),
   },
-  // Facebook Marketplace — pay-per-event. Keep maxItems small; this is best-effort.
+  // Facebook Marketplace pay-per-event. Normal mode returns the listing images.
   {
     source: "facebook",
     actorId: "parseforge~facebook-marketplace-scraper",
@@ -209,7 +211,7 @@ const ACTORS: ApifyActor[] = [
           query: "apartment for rent",
         },
       ],
-      maxItems: 25,
+      maxItems: envInt("APIFY_FACEBOOK_MAX_ITEMS", DEFAULT_FACEBOOK_MAX_ITEMS),
       enrichListings: false,
       proxyConfiguration: APIFY_PROXY_BY_CITY[ctx.city],
     }),
@@ -222,6 +224,11 @@ function toMoney(v: unknown): number {
   if (typeof v !== "string") return 0;
   const m = v.match(/[\d,]+/);
   return m ? parseInt(m[0].replace(/,/g, ""), 10) : 0;
+}
+
+function envInt(name: string, fallback: number): number {
+  const parsed = Number(process.env[name]);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
 }
 
 function genericNormalize(r: any, source: Source, ctx: ScrapeContext): RawListing | null {
@@ -350,23 +357,70 @@ function numOr(...vals: unknown[]): number | undefined {
 }
 
 function pickPhotos(r: any): string[] {
-  const candidates =
-    r?.images ??
-    r?.photos ??
-    r?.photoUrls ??
-    r?.imageUrls ??
-    r?.media ??
-    r?.mediaUrls ??
-    r?.imageUrl ??
-    r?.image;
-  if (typeof candidates === "string") return [candidates];
-  if (Array.isArray(candidates)) {
-    return candidates
-      .map((c) => (typeof c === "string" ? c : c?.url ?? c?.src))
-      .filter((s): s is string => typeof s === "string")
-      .slice(0, 6);
+  const photos = new Set<string>();
+  collectPhotos(r, photos, 0, false);
+  return Array.from(photos).slice(0, 12);
+}
+
+function collectPhotos(value: unknown, out: Set<string>, depth: number, photoContext: boolean): void {
+  if (depth > 7 || value == null) return;
+
+  if (typeof value === "string") {
+    const url = normalizePhotoUrl(value);
+    if (url && (photoContext || isLikelyPhotoUrl(url))) out.add(url);
+    return;
   }
-  return [];
+
+  if (Array.isArray(value)) {
+    for (const item of value) collectPhotos(item, out, depth + 1, photoContext);
+    return;
+  }
+
+  if (typeof value !== "object") return;
+  const obj = value as Record<string, unknown>;
+  const mediaUrl = photoUrlFromMediaObject(obj);
+  if (mediaUrl) out.add(mediaUrl);
+  for (const [key, child] of Object.entries(obj)) {
+    const nextPhotoContext = photoContext || isPhotoKey(key);
+    if (nextPhotoContext || depth < 3) {
+      collectPhotos(child, out, depth + 1, nextPhotoContext);
+    }
+  }
+}
+
+function isPhotoKey(key: string): boolean {
+  return /photo|image|media|picture|thumbnail|cover|gallery|carousel|large|medium|small|src|url/i.test(key);
+}
+
+function photoUrlFromMediaObject(obj: Record<string, unknown>): string | null {
+  const mediaType = obj.media_type ?? obj.mediaType;
+  if (mediaType != null && mediaType !== 1 && mediaType !== "1" && mediaType !== "photo" && mediaType !== "image") {
+    return null;
+  }
+
+  const id = obj.media_id ?? obj.mediaId ?? obj.image_id ?? obj.imageId;
+  if ((typeof id !== "number" && typeof id !== "string") || String(id).trim() === "") return null;
+  return `https://img.zumpercdn.com/${String(id).trim()}/1280x960`;
+}
+
+function normalizePhotoUrl(value: string): string | null {
+  const trimmed = value.trim();
+  if (!/^https?:\/\//i.test(trimmed)) return null;
+  if (!isLikelyPhotoUrl(trimmed)) return null;
+  return trimmed.replace(/&amp;/g, "&");
+}
+
+function isLikelyPhotoUrl(url: string): boolean {
+  const lower = url.toLowerCase();
+  if (/\/logos?\//.test(lower) || /logo|wordmark/.test(lower)) return false;
+  if (/\.(?:html?|php|aspx)(?:[?#].*)?$/i.test(lower)) return false;
+  if (lower.includes("/marketplace/") || lower.includes("/apartment/") || lower.includes("/rentals/")) {
+    return /\.(jpe?g|png|webp)(?:[?#].*)?$/i.test(lower);
+  }
+  return (
+    /\.(jpe?g|png|webp)(?:[?#].*)?$/i.test(lower) ||
+    /fbcdn|zumpercdn|cloudfront|ctfassets|images|photos|imgix|rentals\.ca|liv\.rent/i.test(lower)
+  );
 }
 
 async function runActor(actor: ApifyActor, token: string, ctx: ScrapeContext): Promise<RawListing[]> {

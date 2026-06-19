@@ -1,6 +1,6 @@
 /**
  * Apify monthly-usage check. Surfaces a warning in the daily email when
- * credit is low or exhausted — so we notice before Zillow stops working.
+ * credit is low or exhausted, so we notice before Zillow stops working.
  */
 
 export type ApifyStatus = "ok" | "warning" | "critical" | "exhausted" | "unknown";

@@ -1,5 +1,5 @@
 /**
- * Last-ditch Zillow attempt: navigate as a human does — homepage first,
+ * Last-ditch Zillow attempt: navigate as a human does, homepage first,
  * mouse movement + typing, then filters. Saves listings + screenshots to /tmp.
  */
 import { chromium as ce } from "playwright-extra";

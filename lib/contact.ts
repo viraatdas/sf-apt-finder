@@ -3,7 +3,7 @@
  * embedded in the description text. We try the cheap path first (regex), then
  * optionally fall back to an LLM call for messier text.
  *
- * LLM path uses Anthropic Claude — enabled only when ANTHROPIC_API_KEY is set.
+ * LLM path uses Anthropic Claude, enabled only when ANTHROPIC_API_KEY is set.
  */
 
 export interface Contact {
@@ -17,7 +17,7 @@ const PHONE_RX =
 const EMAIL_RX =
   /\b([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})\b/gi;
 
-/** Cheap regex pass — pulls obvious phone/email matches out of free text. */
+/** Cheap regex pass: pulls obvious phone/email matches out of free text. */
 export function extractContactRegex(text: string | null | undefined): Contact {
   if (!text || text.length < 5) return {};
   const out: Contact = {};
@@ -35,7 +35,7 @@ export function extractContactRegex(text: string | null | undefined): Contact {
   return out;
 }
 
-/** LLM pass — gives us the contact NAME plus catches phones written in
+/** LLM pass: gives us the contact NAME plus catches phones written in
  * non-standard formats (e.g. "5-five-five-..."). Anthropic Claude via REST. */
 export async function extractContactLLM(text: string): Promise<Contact> {
   const key = process.env.ANTHROPIC_API_KEY;
@@ -87,7 +87,7 @@ export async function extractContactLLM(text: string): Promise<Contact> {
 export async function extractContact(text: string | null | undefined): Promise<Contact> {
   if (!text) return {};
   const r = extractContactRegex(text);
-  // Skip LLM if we already have phone AND email — no upside.
+  // Skip LLM if we already have phone AND email.
   if (r.phone && r.email) return r;
   const llm = await extractContactLLM(text);
   return {

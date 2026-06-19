@@ -25,6 +25,12 @@ export function sourceLabel(source: string): string {
   return SOURCE_INFO[source as Source]?.label ?? source;
 }
 
+export function sourceFromParam(city: CityId, value: string | null | undefined): Source | null {
+  if (!value) return null;
+  const configured = new Set(configuredSourcesForCity(city).map((source) => source.source));
+  return configured.has(value as Source) ? (value as Source) : null;
+}
+
 export function configuredSourcesForCity(city: CityId): Array<{ source: Source; label: string; note?: string }> {
   const seen = new Set<Source>();
   const sources = [];

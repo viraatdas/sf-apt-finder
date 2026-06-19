@@ -1,10 +1,6 @@
-import { sql, and, eq, lt, isNull, inArray } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { CITIES, cityFromParam, contextFromEnv, type CityId } from "@/lib/cities";
-import { extractContact } from "@/lib/contact";
 import { db, schema } from "@/lib/db";
-import { mergeRaw } from "@/lib/dedup";
-import { geocode } from "@/lib/geocode";
-import { neighborhoodFor } from "@/lib/neighborhoods";
 import { craigslist } from "./craigslist";
 import { kijiji } from "./kijiji";
 import { zillow } from "./zillow";
@@ -12,7 +8,8 @@ import { redfin } from "./redfin";
 import { realtor } from "./realtor";
 import { zumper } from "./zumper";
 import { apifyScraper } from "./apify";
-import type { RawListing, Scraper, ScrapeContext, Source } from "./types";
+import { ingestRawListings } from "./ingest";
+import type { RawListing, ScrapeProgressEvent, Scraper, ScrapeContext, Source } from "./types";
 
 const DIRECT_SCRAPERS: Partial<Record<Source, Scraper>> = {
   craigslist,
@@ -45,14 +42,22 @@ export interface ScrapeResult {
   newListings: Array<{ id: string; title: string; price: number; neighborhood?: string; url: string }>;
 }
 
-/** Sources we trust to mark listings as unavailable when missing.
- * Apify-backed sources are unreliable (token may be unset) — skip them. */
-const RELIABLE_SOURCES: Source[] = ["craigslist", "kijiji", "zillow", "redfin", "realtor", "zumper"];
+export type ScrapeProgressHandler = (event: ScrapeProgressEvent) => void;
 
-/** Grace window — only mark unavailable if we haven't seen it in 3+ days. */
-const UNAVAILABLE_AFTER_MS = 3 * 24 * 60 * 60 * 1000;
+/** Direct sources that are complete enough to expire stale rows when they succeed. */
+const SWEEPABLE_DIRECT_SOURCES = new Set<Source>([
+  "craigslist",
+  "kijiji",
+  "zillow",
+  "redfin",
+  "realtor",
+  "zumper",
+]);
 
-export async function runAllScrapers(ctx?: Partial<ScrapeContext>): Promise<ScrapeResult> {
+export async function runAllScrapers(
+  ctx?: Partial<ScrapeContext>,
+  options: { onProgress?: ScrapeProgressHandler } = {}
+): Promise<ScrapeResult> {
   const envContext = contextFromEnv(ctx);
   const context: ScrapeContext = {
     ...envContext,
@@ -63,11 +68,15 @@ export async function runAllScrapers(ctx?: Partial<ScrapeContext>): Promise<Scra
 
   const perSource = {} as ScrapeResult["perSource"];
   const allRaw: RawListing[] = [];
+  const emit = options.onProgress ?? (() => {});
+
+  emit({ type: "start", city: context.city, sourceCount: scrapers.length });
 
   // Run scrapers in parallel; each logs to scrape_runs.
   const results = await Promise.allSettled(
     scrapers.map(async (s) => {
       const start = Date.now();
+      emit({ type: "source:start", city: context.city, source: s.source });
       const [run] = await db
         .insert(schema.scrapeRuns)
         .values({ source: s.source, city: context.city })
@@ -78,177 +87,55 @@ export async function runAllScrapers(ctx?: Partial<ScrapeContext>): Promise<Scra
           .update(schema.scrapeRuns)
           .set({ rawCount: raw.length, finishedAt: new Date() })
           .where(sql`${schema.scrapeRuns.id} = ${run.id}`);
-        return { source: s.source, raw, ms: Date.now() - start };
+        const ms = Date.now() - start;
+        emit({ type: "source:done", city: context.city, source: s.source, raw: raw.length, ms });
+        return { source: s.source, raw, ms };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         await db
           .update(schema.scrapeRuns)
           .set({ error: msg, finishedAt: new Date() })
           .where(sql`${schema.scrapeRuns.id} = ${run.id}`);
-        return { source: s.source, raw: [] as RawListing[], error: msg, ms: Date.now() - start };
+        const ms = Date.now() - start;
+        emit({ type: "source:error", city: context.city, source: s.source, error: msg, ms });
+        return { source: s.source, raw: [] as RawListing[], error: msg, ms };
       }
     })
   );
 
-  const reliableSucceeded = new Set<Source>();
+  const sweepableSucceeded = new Set<Source>();
   for (const r of results) {
     if (r.status !== "fulfilled") continue;
     const { source, raw, error } = r.value;
     perSource[source] = { raw: raw.length, error };
     allRaw.push(...raw);
-    if (!error && RELIABLE_SOURCES.includes(source)) reliableSucceeded.add(source);
+    if (!error && raw.length > 0 && SWEEPABLE_DIRECT_SOURCES.has(source)) sweepableSucceeded.add(source);
   }
 
-  // Filter to the active city's bedroom/price constraints.
-  const filtered = allRaw.filter((r) => {
-    if (r.price > context.maxPrice) return false;
-    if (context.bedrooms != null && r.bedrooms != null && r.bedrooms < context.bedrooms) return false;
-    if (context.bedrooms != null && r.bedrooms != null && r.bedrooms > context.bedrooms + 2) return false;
-    return true;
+  emit({ type: "ingest:start", city: context.city, raw: allRaw.length });
+  const ingested = await ingestRawListings(db, allRaw, context, {
+    geocodeBudget: Number(process.env.GEOCODE_BUDGET ?? 10),
+    contactBudget: Number(process.env.CONTACT_EXTRACT_BUDGET ?? 15),
+    sweepSources: sweepableSucceeded,
+  });
+  emit({
+    type: "ingest:done",
+    city: context.city,
+    totalMerged: ingested.totalMerged,
+    newCount: ingested.newCount,
+    updatedCount: ingested.updatedCount,
+    unavailableCount: ingested.unavailableCount,
   });
 
-  // Merge duplicates
-  const merged = mergeRaw(filtered, context.city);
-
-  // Geocode any without coords (rate-limited at 1 req/s — keep within function budget)
-  let geocoded = 0;
-  const geocodeBudget = Number(process.env.GEOCODE_BUDGET ?? 10);
-  for (const m of merged) {
-    if (geocoded >= geocodeBudget) break;
-    if ((m.lat == null || m.lng == null) && m.addressLine) {
-      const r = await geocode(m.addressLine, context.city);
-      if (r) {
-        m.lat = r.lat;
-        m.lng = r.lng;
-        geocoded++;
-      }
-    }
-  }
-
-  // Upsert into DB
-  let newCount = 0;
-  let updatedCount = 0;
-  let unavailableCount = 0;
-  const newListings: ScrapeResult["newListings"] = [];
-  const seenThisRun = new Set<string>();
-
-  for (const m of merged) {
-    seenThisRun.add(m.id);
-    const neighborhood = neighborhoodFor(m.lat, m.lng, context.city);
-    const values = {
-      id: m.id,
-      city: context.city,
-      title: m.title.slice(0, 500),
-      addressLine: m.addressLine ?? null,
-      neighborhood: neighborhood ?? null,
-      zip: m.zip ?? null,
-      lat: m.lat ?? null,
-      lng: m.lng ?? null,
-      bedrooms: m.bedrooms ?? null,
-      bathrooms: m.bathrooms ?? null,
-      sqft: m.sqft ?? null,
-      price: m.price,
-      pricesBySource: m.pricesBySource,
-      description: m.description ?? null,
-      photoUrls: m.photoUrls ?? [],
-      sources: m.sources,
-      raw: m.raw,
-      lastSeenAt: new Date(),
-    };
-
-    const result = await db
-      .insert(schema.listings)
-      .values(values)
-      .onConflictDoUpdate({
-        target: schema.listings.id,
-        set: {
-          city: values.city,
-          lastSeenAt: new Date(),
-          price: sql`LEAST(${schema.listings.price}, EXCLUDED.price)`,
-          pricesBySource: values.pricesBySource,
-          sources: values.sources,
-          photoUrls: values.photoUrls,
-          neighborhood: values.neighborhood,
-          lat: values.lat,
-          lng: values.lng,
-          // Revive a previously-unavailable listing if it shows up again
-          status: "available",
-          unavailableAt: null,
-        },
-      })
-      .returning({ id: schema.listings.id, firstSeenAt: schema.listings.firstSeenAt });
-
-    if (result[0]) {
-      const isNew =
-        new Date(result[0].firstSeenAt).getTime() > Date.now() - 60_000;
-      if (isNew) {
-        newCount++;
-        newListings.push({
-          id: m.id,
-          title: m.title,
-          price: m.price,
-          neighborhood,
-          url: m.sources[0]?.url ?? "",
-        });
-      } else {
-        updatedCount++;
-      }
-    }
-  }
-
-  // Contact extraction for newly-inserted listings that have a description.
-  // Bounded so a heavy LLM run can't blow the function timeout.
-  const contactBudget = Number(process.env.CONTACT_EXTRACT_BUDGET ?? 15);
-  if (newListings.length > 0 && process.env.ANTHROPIC_API_KEY) {
-    const newIds = newListings.slice(0, contactBudget).map((l) => l.id);
-    const rows = await db
-      .select({ id: schema.listings.id, description: schema.listings.description })
-      .from(schema.listings)
-      .where(and(inArray(schema.listings.id, newIds), isNull(schema.listings.contactExtractedAt)));
-    let extracted = 0;
-    for (const row of rows) {
-      if (!row.description) continue;
-      const c = await extractContact(row.description);
-      const hasAny = !!(c.phone || c.email || c.name);
-      await db
-        .update(schema.listings)
-        .set({
-          contactPhone: c.phone ?? null,
-          contactEmail: c.email ?? null,
-          contactName: c.name ?? null,
-          contactExtractedAt: new Date(),
-        })
-        .where(eq(schema.listings.id, row.id));
-      if (hasAny) extracted++;
-    }
-    console.log(`contact extraction: ${extracted}/${rows.length} found contact info`);
-  }
-
-  // Availability sweep — only run if at least one reliable source succeeded,
-  // otherwise we might wrongly mark everything unavailable on a bad day.
-  if (reliableSucceeded.size > 0) {
-    const cutoff = new Date(Date.now() - UNAVAILABLE_AFTER_MS);
-    const swept = await db
-      .update(schema.listings)
-      .set({ status: "unavailable", unavailableAt: new Date() })
-      .where(
-        and(
-          eq(schema.listings.status, "available"),
-          eq(schema.listings.city, context.city),
-          lt(schema.listings.lastSeenAt, cutoff)
-        )
-      )
-      .returning({ id: schema.listings.id });
-    unavailableCount = swept.length;
-  }
-
-  return {
+  const result = {
     totalRaw: allRaw.length,
-    totalMerged: merged.length,
-    newCount,
-    updatedCount,
-    unavailableCount,
+    totalMerged: ingested.totalMerged,
+    newCount: ingested.newCount,
+    updatedCount: ingested.updatedCount,
+    unavailableCount: ingested.unavailableCount,
     perSource,
-    newListings,
+    newListings: ingested.newListings,
   };
+  emit({ type: "done", city: context.city, ...result });
+  return result;
 }

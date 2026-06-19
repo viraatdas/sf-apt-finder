@@ -10,7 +10,7 @@ chromiumExtra.use(stealth());
 
 async function main() {
   const browser = await chromiumExtra.launch({
-    headless: false, // headed has better chance — DataDome detects headless
+    headless: false, // headed has better chance because DataDome detects headless
     args: [
       "--disable-blink-features=AutomationControlled",
       "--no-sandbox",

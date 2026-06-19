@@ -5,12 +5,14 @@
 import "dotenv/config";
 import { contextFromEnv } from "../lib/cities";
 import { runAllScrapers } from "../lib/scrapers";
+import { formatScrapeProgress } from "../lib/scrapers/progress";
 import { sendDailyDigest } from "../lib/email";
 
 async function main() {
   const ctx = contextFromEnv();
-  console.log(`Starting scrape for ${ctx.city}...`);
-  const result = await runAllScrapers(ctx);
+  const result = await runAllScrapers(ctx, {
+    onProgress: (event) => console.log(formatScrapeProgress(event)),
+  });
   console.log(JSON.stringify(result, null, 2));
 
   if (process.argv.includes("--email")) {

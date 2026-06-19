@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
+import { userIdFromRequest } from "@/lib/server-user";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const { listingId, decision, userId = "household" } = body ?? {};
-  if (!listingId || !["yes", "no", "maybe"].includes(decision)) {
+  const body = await req.json().catch(() => ({}));
+  const { listingId, decision } = body ?? {};
+  const userId = userIdFromRequest(req, body?.userId);
+  if (!listingId || !userId || !["yes", "no", "maybe"].includes(decision)) {
     return NextResponse.json({ error: "bad request" }, { status: 400 });
   }
   await db
@@ -23,8 +25,8 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const url = new URL(req.url);
   const listingId = url.searchParams.get("listingId");
-  const userId = url.searchParams.get("userId") ?? "household";
-  if (!listingId) return NextResponse.json({ error: "bad request" }, { status: 400 });
+  const userId = userIdFromRequest(req, url.searchParams.get("userId"));
+  if (!listingId || !userId) return NextResponse.json({ error: "bad request" }, { status: 400 });
   await db
     .delete(schema.decisions)
     .where(

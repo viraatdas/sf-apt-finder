@@ -1,7 +1,7 @@
 import type { RawListing, Scraper, ScrapeContext } from "./types";
 
 /**
- * Realtor.com — uses their RDC GraphQL search endpoint. Often blocked from servers.
+ * Realtor.com uses their RDC GraphQL search endpoint. Often blocked from servers.
  * Returns [] on failure rather than throwing so the orchestrator keeps going.
  */
 export const realtor: Scraper = {

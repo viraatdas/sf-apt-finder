@@ -1,6 +1,6 @@
 /**
  * One-shot reset: clear test swipes + trim audit log.
- * Listings table is intentionally preserved — tomorrow's cron refreshes it.
+ * Listings table is intentionally preserved. Tomorrow's cron refreshes it.
  */
 import "dotenv/config";
 import postgres from "postgres";

@@ -4,7 +4,7 @@ import type { RawListing } from "./scrapers/types";
 
 /** Stable canonical ID for a listing.
  * Priority:
- *   1. Geo (lat,lng rounded to ~10m) + bedrooms — most reliable cross-source key
+ *   1. Geo (lat,lng rounded to ~10m) + bedrooms: most reliable cross-source key
  *   2. Specific street address + zip + bedrooms (skip generic "city of X" labels)
  *   3. Per-source fallback so each post is its own listing
  */

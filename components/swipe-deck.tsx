@@ -18,13 +18,14 @@ import {
 } from "framer-motion";
 import dynamic from "next/dynamic";
 import {
-  Check, X, HelpCircle, ExternalLink, MapPin, Bed, Bath, Maximize2,
-  ChevronLeft, ChevronRight, RotateCcw, Keyboard,
+  ArrowLeft, ArrowRight, ArrowUp, ExternalLink, MapPin, Bed, Bath, Maximize2,
+  ChevronLeft, ChevronRight, RotateCcw,
 } from "lucide-react";
-import { formatMoney } from "@/lib/utils";
+import { formatMoney, normalizeDisplayText } from "@/lib/utils";
 import type { Listing } from "@/lib/db/schema";
 import type { CityId } from "@/lib/cities";
 import { sourceLabel } from "@/lib/sources";
+import { getOrCreateUserId } from "@/components/user-scope";
 
 const ListingMap = dynamic(() => import("./listing-map").then((m) => m.ListingMap), {
   ssr: false,
@@ -47,8 +48,13 @@ export function SwipeDeck({ initial, city }: { initial: Listing[]; city: CityId 
   // update it directly without ref indirection. Reset to 0 on top change.
   const [photoIdx, setPhotoIdx] = useState(0);
   const topRef = useRef<CardHandle | null>(null);
+  const userIdRef = useRef<string | null>(null);
   const top = deck[0];
   const topPhotos = (top?.photoUrls as string[] | null) ?? [];
+
+  useEffect(() => {
+    userIdRef.current = getOrCreateUserId();
+  }, []);
 
   useEffect(() => {
     setPhotoIdx(0);
@@ -72,10 +78,12 @@ export function SwipeDeck({ initial, city }: { initial: Listing[]; city: CityId 
     setDeck((d) => d.filter((l) => l.id !== listing.id));
     setHoverDecision(null);
     try {
+      const userId = userIdRef.current ?? getOrCreateUserId();
+      userIdRef.current = userId;
       await fetch("/api/decisions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ listingId: listing.id, decision }),
+        body: JSON.stringify({ listingId: listing.id, decision, userId }),
       });
     } catch (err) {
       console.warn("decision save failed", err);
@@ -88,7 +96,10 @@ export function SwipeDeck({ initial, city }: { initial: Listing[]; city: CityId 
     setHistory((h) => h.slice(0, -1));
     setDeck((d) => [last.listing, ...d]);
     try {
-      await fetch(`/api/decisions?listingId=${encodeURIComponent(last.listing.id)}`, {
+      const userId = userIdRef.current ?? getOrCreateUserId();
+      userIdRef.current = userId;
+      const params = new URLSearchParams({ listingId: last.listing.id, userId });
+      await fetch(`/api/decisions?${params.toString()}`, {
         method: "DELETE",
       });
     } catch (err) {
@@ -100,11 +111,23 @@ export function SwipeDeck({ initial, city }: { initial: Listing[]; city: CityId 
     function onKey(e: KeyboardEvent) {
       // Don't hijack typing in form fields.
       const active = document.activeElement as HTMLElement | null;
-      if (active && ["INPUT", "TEXTAREA"].includes(active.tagName)) return;
+      const inputType = active instanceof HTMLInputElement ? active.type : "";
+      const isTypingField =
+        active &&
+        (active.tagName === "TEXTAREA" ||
+          (active.tagName === "INPUT" && inputType !== "range"));
+      if (isTypingField) return;
       if (!top) return;
       // Release any focused button so its native space/enter activation
       // doesn't fire after we handle the key.
-      if (active && active instanceof HTMLButtonElement) active.blur();
+      if (
+        active &&
+        (active instanceof HTMLButtonElement ||
+          active instanceof HTMLInputElement ||
+          active instanceof HTMLSelectElement)
+      ) {
+        active.blur();
+      }
 
       if (e.key === "ArrowLeft") { e.preventDefault(); decide(top, "no"); }
       else if (e.key === "ArrowRight") { e.preventDefault(); decide(top, "yes"); }
@@ -116,7 +139,7 @@ export function SwipeDeck({ initial, city }: { initial: Listing[]; city: CityId 
       }
       else if (e.key === "ArrowDown") { e.preventDefault(); prevPhoto(); }
       else if ((e.key === "z" || e.key === "Z") && (e.metaKey || e.ctrlKey)) { e.preventDefault(); undo(); }
-      // (no help-toggle key — shortcuts are always visible in the top bar)
+      // Shortcuts are always visible in the top bar.
     }
     // Capture phase so we beat any focused button's default activation.
     window.addEventListener("keydown", onKey, true);
@@ -131,7 +154,7 @@ export function SwipeDeck({ initial, city }: { initial: Listing[]; city: CityId 
         id: l.id,
         lat: l.lat!,
         lng: l.lng!,
-        title: l.title,
+        title: normalizeDisplayText(l.title),
         price: l.price ?? 0,
         neighborhood: l.neighborhood,
         decision: null,
@@ -142,7 +165,7 @@ export function SwipeDeck({ initial, city }: { initial: Listing[]; city: CityId 
         id: h.listing.id + "_d",
         lat: h.listing.lat!,
         lng: h.listing.lng!,
-        title: h.listing.title,
+        title: normalizeDisplayText(h.listing.title),
         price: h.listing.price ?? 0,
         neighborhood: h.listing.neighborhood,
         decision: h.decision,
@@ -169,14 +192,14 @@ export function SwipeDeck({ initial, city }: { initial: Listing[]; city: CityId 
   }
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(720px,860px)] gap-4 xl:gap-8 max-w-[1900px] mx-auto px-4 py-4 xl:px-6 xl:py-6">
+    <div className="grid grid-cols-1 xl:grid-cols-[minmax(420px,0.95fr)_minmax(600px,780px)] gap-4 xl:gap-6 max-w-[1800px] mx-auto px-4 py-3 xl:px-6 xl:py-4">
       {/* Map */}
-      <div className="h-[40vh] xl:h-[calc(100vh-7rem)] rounded-2xl overflow-hidden border border-ink-100 shadow-sm">
+      <div className="h-[34vh] md:h-[40vh] xl:h-[calc(100vh-10.5rem)] rounded-2xl overflow-hidden border border-ink-100 shadow-sm">
         <ListingMap pins={pins} focus={focus} city={city} />
       </div>
 
       {/* Card deck */}
-      <div className="relative h-[72vh] xl:h-[calc(100vh-7rem)]">
+      <div className="relative h-[68vh] min-h-[620px] xl:h-[calc(100vh-10.5rem)] xl:min-h-0">
         <AnimatePresence mode="popLayout">
           {deck.slice(0, 3).reverse().map((listing, i, arr) => {
             const isTop = i === arr.length - 1;
@@ -279,7 +302,7 @@ const SwipeCard = forwardRef<CardHandle, {
   const rotate = useTransform(x, [-700, 0, 700], [-45, 0, 45]);
   const yesOpacity = useTransform(x, [40, 160], [0, 1]);
   const noOpacity = useTransform(x, [-160, -40], [1, 0]);
-  const maybeOpacity = useTransform(y, [-160, -40], [1, 0]);
+  const maybeOpacity = useTransform(y, [-180, -60], [1, 0]);
   const photos = (listing.photoUrls as string[] | null) ?? [];
   const sources = (listing.sources as any[] | null) ?? [];
   const prices = (listing.pricesBySource as Record<string, number> | null) ?? {};
@@ -315,38 +338,32 @@ const SwipeCard = forwardRef<CardHandle, {
     [x, y, photos.length, photoIdx, onPhotoChange]
   );
 
-  // Reactive hover decision based on drag
+  // Reactive hover decision based on horizontal drag.
   useEffect(() => {
     if (!isTop || !onHoverDecision) return;
     const unsubX = x.on("change", (v) => {
       if (v > 80) onHoverDecision("yes");
       else if (v < -80) onHoverDecision("no");
-      else if (y.get() < -80) onHoverDecision("maybe");
       else onHoverDecision(null);
     });
-    const unsubY = y.on("change", (v) => {
-      if (v < -80 && Math.abs(x.get()) < 80) onHoverDecision("maybe");
-      else if (Math.abs(x.get()) < 80 && v > -80) onHoverDecision(null);
-    });
-    return () => { unsubX(); unsubY(); };
-  }, [isTop, onHoverDecision, x, y]);
+    return () => { unsubX(); };
+  }, [isTop, onHoverDecision, x]);
 
-  function onDragEnd(_: any, info: { offset: { x: number; y: number }; velocity: { x: number; y: number } }) {
+  function onDragEnd(_: MouseEvent | TouchEvent | PointerEvent, info: { offset: { x: number; y: number }; velocity: { x: number; y: number } }) {
     const { offset, velocity } = info;
     const tX = 130;
-    const tY = 110;
     if (offset.x > tX || velocity.x > 700) onDecide("yes");
     else if (offset.x < -tX || velocity.x < -700) onDecide("no");
-    else if (offset.y < -tY || velocity.y < -700) onDecide("maybe");
   }
 
   const currentPhoto = photos[photoIdx];
 
   return (
     <motion.div
-      drag={isTop}
+      drag={isTop ? "x" : false}
       dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
-      dragElastic={0.7}
+      dragElastic={0.38}
+      dragMomentum={false}
       onDragEnd={onDragEnd}
       style={{
         x: isTop ? x : 0,
@@ -365,8 +382,8 @@ const SwipeCard = forwardRef<CardHandle, {
       }}
       className="absolute inset-0 bg-white rounded-3xl border border-ink-100 overflow-hidden cursor-grab active:cursor-grabbing shadow-2xl"
     >
-      <div className="grid grid-rows-[58%_42%] h-full">
-        {/* Photo area — tap left half to go back, right half to advance */}
+      <div className="grid grid-rows-[55%_45%] h-full">
+        {/* Photo area: tap left half to go back, right half to advance */}
         <motion.div
           className="relative bg-ink-100 overflow-hidden group"
           onTap={(e, info) => {
@@ -387,7 +404,7 @@ const SwipeCard = forwardRef<CardHandle, {
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={currentPhoto}
-              alt={listing.title}
+              alt={normalizeDisplayText(listing.title)}
               className="w-full h-full object-cover select-none"
               draggable={false}
             />
@@ -398,7 +415,7 @@ const SwipeCard = forwardRef<CardHandle, {
             </div>
           )}
 
-          {photos.length > 1 && (
+          {isTop && photos.length > 1 && (
             <>
               <div className="absolute top-3 left-3 right-3 flex gap-1 pointer-events-none">
                 {photos.slice(0, 12).map((_, i) => (
@@ -423,7 +440,10 @@ const SwipeCard = forwardRef<CardHandle, {
               >
                 <ChevronRight className="w-5 h-5" />
               </button>
-              <div className="absolute top-3 right-3 px-2 py-0.5 bg-black/40 backdrop-blur-sm rounded text-white text-[10px] font-medium opacity-0 group-hover:opacity-100 transition pointer-events-none">
+              <div
+                aria-live="polite"
+                className="absolute top-3 right-3 px-2 py-0.5 bg-black/50 backdrop-blur-sm rounded text-white text-[10px] font-medium pointer-events-none"
+              >
                 {photoIdx + 1}/{photos.length}
               </div>
             </>
@@ -462,17 +482,17 @@ const SwipeCard = forwardRef<CardHandle, {
             </div>
             {listing.neighborhood && (
               <div className="bg-white/95 text-ink-900 rounded-full px-3 py-1.5 text-sm font-semibold flex items-center gap-1 shadow-md">
-                <MapPin className="w-3.5 h-3.5" /> {listing.neighborhood}
+                <MapPin className="w-3.5 h-3.5" /> {normalizeDisplayText(listing.neighborhood)}
               </div>
             )}
           </div>
         </motion.div>
 
         {/* Details */}
-        <div className="p-6 overflow-y-auto no-scrollbar">
-          <h2 className="font-display text-2xl leading-tight mb-2">{listing.title}</h2>
+        <div className="p-5 pb-24 overflow-y-auto no-scrollbar">
+          <h2 className="font-display text-2xl leading-tight mb-2">{normalizeDisplayText(listing.title)}</h2>
           {listing.addressLine && (
-            <div className="text-sm text-ink-900/60 mb-3 truncate">{listing.addressLine}</div>
+            <div className="text-sm text-ink-900/60 mb-3 truncate">{normalizeDisplayText(listing.addressLine)}</div>
           )}
           <div className="flex gap-5 text-sm text-ink-900/80 mb-3 flex-wrap">
             {listing.bedrooms != null && (
@@ -512,7 +532,7 @@ const SwipeCard = forwardRef<CardHandle, {
 
           {listing.description && (
             <p className="text-sm text-ink-900/70 leading-relaxed line-clamp-5 mb-3">
-              {listing.description}
+              {normalizeDisplayText(listing.description)}
             </p>
           )}
 
@@ -582,59 +602,62 @@ function ActionBar({
   hoverDecision: Decision | null;
 }) {
   return (
-    <div className="absolute bottom-5 left-0 right-0 flex justify-center items-center gap-3 z-[120]">
+    <div className="absolute bottom-4 left-0 right-0 flex justify-center items-center gap-2.5 z-[120] px-3">
       {canUndo && (
         <motion.button
           whileHover={{ scale: 1.08 }}
           whileTap={{ scale: 0.95 }}
           onClick={(e) => { (e.currentTarget as HTMLElement).blur(); onUndo(); }}
           title="Undo (⌘Z)"
-          className="w-12 h-12 rounded-full bg-white border border-ink-100 text-ink-900/60 shadow-md hover:text-ink-900 flex items-center justify-center"
+          className="h-12 w-12 rounded-full bg-white border border-ink-100 text-ink-900/60 shadow-md hover:text-ink-900 flex items-center justify-center shrink-0"
         >
           <RotateCcw className="w-5 h-5" />
         </motion.button>
       )}
       <motion.button
-        whileHover={{ scale: 1.1 }}
-        whileTap={{ scale: 0.92 }}
+        whileHover={{ scale: 1.04 }}
+        whileTap={{ scale: 0.96 }}
         onMouseEnter={() => onHover("no")}
         onMouseLeave={() => onHover(null)}
         onClick={(e) => { (e.currentTarget as HTMLElement).blur(); onDecide("no"); }}
         title="Not interested (←)"
         className={
-          "w-16 h-16 rounded-full bg-white border-2 border-accent-no text-accent-no shadow-lg flex items-center justify-center transition " +
+          "h-12 sm:h-14 min-w-0 sm:min-w-28 rounded-full bg-white border-2 border-accent-no text-accent-no shadow-lg flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 text-sm sm:text-base font-extrabold transition " +
           (hoverDecision === "no" ? "scale-110 shadow-xl" : "")
         }
       >
-        <X className="w-7 h-7" strokeWidth={3} />
+        <ArrowLeft className="w-6 h-6" strokeWidth={3} />
+        Nope
       </motion.button>
       <motion.button
-        whileHover={{ scale: 1.1 }}
-        whileTap={{ scale: 0.92 }}
+        whileHover={{ scale: 1.04 }}
+        whileTap={{ scale: 0.96 }}
         onMouseEnter={() => onHover("maybe")}
         onMouseLeave={() => onHover(null)}
         onClick={(e) => { (e.currentTarget as HTMLElement).blur(); onDecide("maybe"); }}
         title="Uncertain (↑)"
         className={
-          "w-14 h-14 rounded-full bg-white border-2 border-accent-maybe text-amber-600 shadow-lg flex items-center justify-center transition " +
+          "h-12 sm:h-14 min-w-0 sm:min-w-32 rounded-full bg-white border-2 border-accent-maybe text-amber-600 shadow-lg flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 text-sm sm:text-base font-extrabold transition " +
           (hoverDecision === "maybe" ? "scale-110 shadow-xl" : "")
         }
       >
-        <HelpCircle className="w-6 h-6" strokeWidth={2.5} />
+        <ArrowUp className="w-6 h-6" strokeWidth={3} />
+        Maybe
       </motion.button>
       <motion.button
-        whileHover={{ scale: 1.1 }}
-        whileTap={{ scale: 0.92 }}
+        whileHover={{ scale: 1.04 }}
+        whileTap={{ scale: 0.96 }}
         onMouseEnter={() => onHover("yes")}
         onMouseLeave={() => onHover(null)}
         onClick={(e) => { (e.currentTarget as HTMLElement).blur(); onDecide("yes"); }}
         title="Like it (→)"
         className={
-          "w-16 h-16 rounded-full bg-white border-2 border-accent-yes text-accent-yes shadow-lg flex items-center justify-center transition " +
+          "h-12 sm:h-14 min-w-0 sm:min-w-28 rounded-full bg-white border-2 border-accent-yes text-accent-yes shadow-lg flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 text-sm sm:text-base font-extrabold transition " +
           (hoverDecision === "yes" ? "scale-110 shadow-xl" : "")
         }
       >
-        <Check className="w-7 h-7" strokeWidth={3} />
+        Yes
+        <ArrowRight className="w-6 h-6" strokeWidth={3} />
       </motion.button>
     </div>
   );

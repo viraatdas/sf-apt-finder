@@ -1,6 +1,6 @@
 /**
  * Rough SF neighborhood bounding boxes. Picks the first match.
- * Good enough for categorization — not for legal boundaries.
+ * Good enough for categorization, not for legal boundaries.
  */
 export interface Neighborhood {
   name: string;

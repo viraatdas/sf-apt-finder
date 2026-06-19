@@ -44,7 +44,7 @@ async function main() {
   await page.waitForTimeout(500);
 
   console.log(`=== ${hits.length} JSON responses ===`);
-  // Sort by size, biggest first — listings APIs are usually large
+  // Sort by size, biggest first. Listings APIs are usually large.
   hits.sort((a, b) => b.len - a.len);
   for (const h of hits.slice(0, 10)) {
     console.log(`${h.len.toString().padStart(7)}b  ${h.url.slice(0, 110)}`);

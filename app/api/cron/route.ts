@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { runAllScrapers } from "@/lib/scrapers";
 import { sendDailyDigest } from "@/lib/email";
 import { activeCities, contextDefaults } from "@/lib/cities";
+import { formatScrapeProgress } from "@/lib/scrapers/progress";
 
-export const maxDuration = 300; // 5 minutes (Vercel Pro). Hobby is 60s — see README.
+export const maxDuration = 300; // 5 minutes.
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
@@ -14,27 +15,68 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
+  if (req.nextUrl.searchParams.get("json") === "1") {
+    const result = await runCron((message) => console.log(message));
+    return NextResponse.json(result, { status: result.ok ? 200 : 500 });
+  }
+
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      const write = (message: string) => {
+        controller.enqueue(encoder.encode(`${new Date().toISOString()} ${message}\n`));
+      };
+      const result = await runCron(write);
+      write(`summary ${JSON.stringify(result)}`);
+      controller.close();
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-store, no-transform",
+      "X-Accel-Buffering": "no",
+    },
+  });
+}
+
+async function runCron(write: (message: string) => void) {
   const siteUrl = process.env.SITE_URL ?? "https://apt-tinder.viraat.dev";
   const cities = activeCities();
   const results = [];
+  let ok = true;
 
   for (const city of cities) {
-    const result = await runAllScrapers(contextDefaults(city));
-    await sendDailyDigest(result, siteUrl, city);
-    results.push({
-      city,
-      newCount: result.newCount,
-      updatedCount: result.updatedCount,
-      totalRaw: result.totalRaw,
-      totalMerged: result.totalMerged,
-      perSource: result.perSource,
-    });
+    write(`city ${city} starting`);
+    try {
+      const result = await runAllScrapers(contextDefaults(city), {
+        onProgress: (event) => write(formatScrapeProgress(event)),
+      });
+      write(`city ${city} emailing digest`);
+      await sendDailyDigest(result, siteUrl, city);
+      write(`city ${city} digest sent`);
+      results.push({
+        city,
+        newCount: result.newCount,
+        updatedCount: result.updatedCount,
+        unavailableCount: result.unavailableCount,
+        totalRaw: result.totalRaw,
+        totalMerged: result.totalMerged,
+        perSource: result.perSource,
+      });
+    } catch (err) {
+      ok = false;
+      const error = err instanceof Error ? err.message : String(err);
+      write(`city ${city} error ${error}`);
+      results.push({ city, error });
+    }
   }
 
-  return NextResponse.json({
-    ok: true,
+  return {
+    ok,
     cities: results,
-  });
+  };
 }
 
 // Allow manual trigger via POST for testing.

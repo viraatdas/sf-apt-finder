@@ -2,7 +2,7 @@
  * Browser-based scrapers (Playwright + stealth). Runs in a real Chromium so
  * we slip past Cloudflare/HUMAN/DataDome challenges that block raw HTTP.
  *
- * NOT importable from Vercel functions — Playwright is too heavy. Run as a
+ * NOT importable from Vercel functions. Playwright is too heavy. Run as a
  * standalone Node script (locally or in GitHub Actions) that writes to the DB.
  */
 import { chromium as chromiumExtra } from "playwright-extra";

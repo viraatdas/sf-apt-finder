@@ -3,7 +3,7 @@ import type { RawListing, ScrapeContext } from "../types";
 import type { BrowserScraper } from "./index";
 
 /**
- * Trulia — DataDome-protected. Stealth Chromium + long warm-up usually slips through.
+ * Trulia is DataDome-protected. Stealth Chromium + long warm-up usually slips through.
  * Listings have `data-testid="property-card-link"` or come from __NEXT_DATA__.
  */
 export const trulia: BrowserScraper = {

@@ -39,6 +39,11 @@ interface VerifyResult {
   reason?: string;
 }
 
+type ListingToVerify = {
+  id: string;
+  urls: string[];
+};
+
 export async function GET(req: NextRequest) {
   const expected = process.env.CRON_SECRET;
   const auth = req.headers.get("authorization");
@@ -75,13 +80,20 @@ async function verifyCity(city: CityId, start: number) {
     .from(schema.listings)
     .where(and(eq(schema.listings.status, "available"), eq(schema.listings.city, city)));
 
-  const items: Array<{ id: string; url: string }> = [];
+  const items: ListingToVerify[] = [];
   for (const r of rows) {
-    const url = (r.sources as any[] | null)?.[0]?.url;
-    if (url) items.push({ id: r.id, url });
+    const urls = Array.from(
+      new Set(
+        (r.sources ?? [])
+          .map((source) => source.url)
+          .filter((url): url is string => typeof url === "string" && url.startsWith("http"))
+      )
+    );
+    if (urls.length) items.push({ id: r.id, urls });
   }
 
   let checked = 0;
+  let urlsChecked = 0;
   let markedUnavailable = 0;
   let confirmedAvailable = 0;
   let skipped = 0;
@@ -96,7 +108,8 @@ async function verifyCity(city: CityId, start: number) {
         // Stop if we're approaching the function timeout
         if (Date.now() - start > 50_000) return;
         const it = items[i];
-        const result = await verifyOne(it.url);
+        const result = await verifyListing(it);
+        urlsChecked += result.urlsChecked;
         checked++;
         if (result.outcome === "unavailable") {
           markedUnavailable++;
@@ -112,7 +125,7 @@ async function verifyCity(city: CityId, start: number) {
 
   // Bulk update unavailable
   if (unavailableIds.length) {
-    // Drizzle's inArray for many IDs — chunk to keep param count sane
+    // Drizzle's inArray for many IDs: chunk to keep param count sane
     const chunks: string[][] = [];
     for (let i = 0; i < unavailableIds.length; i += 200) {
       chunks.push(unavailableIds.slice(i, i + 200));
@@ -135,10 +148,31 @@ async function verifyCity(city: CityId, start: number) {
     city,
     totalAvailable: items.length,
     checked,
+    urlsChecked,
     confirmedAvailable,
     markedUnavailable,
     skipped,
   };
+}
+
+async function verifyListing(listing: ListingToVerify): Promise<VerifyResult & { urlsChecked: number }> {
+  let urlsChecked = 0;
+  let unavailable = 0;
+  let skipped = 0;
+
+  for (const url of listing.urls) {
+    const result = await verifyOne(url);
+    urlsChecked++;
+    if (result.outcome === "available") return { ...result, urlsChecked };
+    if (result.outcome === "unavailable") unavailable++;
+    else skipped++;
+  }
+
+  if (unavailable > 0 && skipped === 0) {
+    return { url: listing.urls[0] ?? "", outcome: "unavailable", reason: "all source URLs unavailable", urlsChecked };
+  }
+
+  return { url: listing.urls[0] ?? "", outcome: "skip", reason: skipped > 0 ? "all source URLs skipped or unavailable" : "no verifiable URLs", urlsChecked };
 }
 
 async function verifyOne(url: string): Promise<VerifyResult> {
@@ -159,11 +193,11 @@ async function verifyOne(url: string): Promise<VerifyResult> {
     if (res.status === 404 || res.status === 410) {
       return { url, outcome: "unavailable", reason: `HTTP ${res.status}` };
     }
-    // Block signals — be conservative, skip
+    // Block signals: be conservative, skip
     if (res.status === 403 || res.status === 429 || res.status >= 500) {
       return { url, outcome: "skip", reason: `HTTP ${res.status}` };
     }
-    // 200 — peek at body for "removed" markers (don't pull megabytes)
+    // 200: peek at body for "removed" markers (don't pull megabytes)
     const text = await res.text();
     const lower = text.toLowerCase().slice(0, 20000); // first 20k chars is plenty
     for (const hint of REMOVED_TEXT_HINTS) {

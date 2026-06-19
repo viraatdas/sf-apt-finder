@@ -14,7 +14,7 @@ import {
 export const decisionEnum = pgEnum("decision", ["yes", "no", "maybe"]);
 export const statusEnum = pgEnum("listing_status", ["available", "unavailable"]);
 
-/** A canonical listing — deduped across sources. */
+/** A canonical listing, deduped across sources. */
 export const listings = pgTable(
   "listings",
   {
@@ -61,7 +61,7 @@ export const listings = pgTable(
   })
 );
 
-/** Per-user swipe decision. We use a single shared "household" for v1. */
+/** Per-user swipe decision. */
 export const decisions = pgTable(
   "decisions",
   {
@@ -69,7 +69,7 @@ export const decisions = pgTable(
     listingId: text("listing_id")
       .notNull()
       .references(() => listings.id, { onDelete: "cascade" }),
-    userId: text("user_id").notNull().default("household"),
+    userId: text("user_id").notNull(),
     decision: decisionEnum("decision").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

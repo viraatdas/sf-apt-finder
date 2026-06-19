@@ -12,10 +12,10 @@ async function main() {
       first_seen_at, status
     FROM listings
     WHERE status='available'
-      AND id NOT IN (SELECT listing_id FROM decisions WHERE user_id='household')
+      AND status='available'
     ORDER BY first_seen_at DESC LIMIT 8`;
   for (const r of rows) {
-    console.log(`  $${r.price} ${r.neighborhood ?? "—"}  photos:${r.photos}  ${r.id}`);
+    console.log(`  $${r.price} ${r.neighborhood ?? "Unknown"}  photos:${r.photos}  ${r.id}`);
     if (r.first_photo) console.log(`     ${r.first_photo}`);
   }
 

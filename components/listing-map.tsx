@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
 import { CITIES, DEFAULT_CITY, type CityId } from "@/lib/cities";
-import { formatMoney } from "@/lib/utils";
+import { formatMoney, normalizeDisplayText } from "@/lib/utils";
 
 // Fix default marker icons in webpack
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -124,8 +124,8 @@ export function ListingMap({
             <Popup>
               <div style={{ font: "13px -apple-system,sans-serif", minWidth: 160 }}>
                 <div style={{ fontWeight: 600 }}>{formatMoney(p.price, city)}/mo</div>
-                <div style={{ color: "#666" }}>{p.neighborhood ?? "—"}</div>
-                <div style={{ marginTop: 4 }}>{p.title}</div>
+                <div style={{ color: "#666" }}>{normalizeDisplayText(p.neighborhood ?? "Unknown")}</div>
+                <div style={{ marginTop: 4 }}>{normalizeDisplayText(p.title)}</div>
                 {p.url && (
                   <a
                     href={p.url}
@@ -133,7 +133,7 @@ export function ListingMap({
                     rel="noreferrer"
                     style={{ color: "#0a0a0c", marginTop: 6, display: "inline-block" }}
                   >
-                    View listing →
+                    View listing
                   </a>
                 )}
               </div>

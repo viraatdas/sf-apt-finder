@@ -19,7 +19,7 @@ const BROWSER_HEADERS = {
 
 const DETAIL_CONCURRENCY = Number(process.env.CL_DETAIL_CONCURRENCY ?? 25);
 const DETAIL_TIMEOUT_MS = 7000;
-// Enrich everything by default — detail pages are cheap, concurrency handles speed.
+// Enrich everything by default. Detail pages are cheap, concurrency handles speed.
 const ENRICH_BUDGET = Number(process.env.CL_ENRICH_BUDGET ?? 200);
 
 const SEARCH_URLS = {

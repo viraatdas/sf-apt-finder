@@ -1,60 +1,34 @@
-import { and, desc, eq, lte, sql } from "drizzle-orm";
 import Link from "next/link";
 import { Bed, Bath, Maximize2, MapPin, ExternalLink } from "lucide-react";
 import { cityFromParam, maxPriceFromParam, type CityId } from "@/lib/cities";
 import { SourceStrip } from "@/components/source-strip";
-import { db, schema } from "@/lib/db";
-import { sourceLabel } from "@/lib/sources";
-import { formatMoney } from "@/lib/utils";
+import { schema } from "@/lib/db";
+import { sourceFromParam, sourceLabel } from "@/lib/sources";
+import { formatMoney, normalizeDisplayText } from "@/lib/utils";
+import { countMatchingListings, listLikedListings, type LikedListingRow } from "@/lib/listings/query";
+import { currentUserId } from "@/lib/server-user";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-type Row = {
-  listing: typeof schema.listings.$inferSelect;
-  decision: "yes" | "no" | "maybe";
-  decidedAt: Date;
-};
-
 type PageProps = {
-  searchParams: Promise<{ city?: string; maxPrice?: string }>;
+  searchParams: Promise<{ city?: string; maxPrice?: string; source?: string }>;
 };
 
 export default async function LikedPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const city = cityFromParam(params.city);
   const maxPrice = maxPriceFromParam(city, params.maxPrice);
-  let rows: Row[] = [];
+  const source = sourceFromParam(city, params.source);
+  let rows: LikedListingRow[] = [];
   let matchingCount = 0;
   try {
-    const [matching] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(schema.listings)
-      .where(
-        and(
-          eq(schema.listings.status, "available"),
-          eq(schema.listings.city, city),
-          lte(schema.listings.price, maxPrice)
-        )
-      );
-    matchingCount = matching?.count ?? 0;
-
-    rows = (await db
-      .select({
-        listing: schema.listings,
-        decision: schema.decisions.decision,
-        decidedAt: schema.decisions.createdAt,
-      })
-      .from(schema.decisions)
-      .innerJoin(schema.listings, eq(schema.decisions.listingId, schema.listings.id))
-      .where(
-        and(
-          eq(schema.decisions.userId, "household"),
-          eq(schema.listings.city, city),
-          lte(schema.listings.price, maxPrice)
-        )
-      )
-      .orderBy(desc(schema.decisions.createdAt))) as any;
+    const filters = { city, maxPrice, source };
+    const userId = await currentUserId();
+    [matchingCount, rows] = await Promise.all([
+      countMatchingListings(filters),
+      listLikedListings(filters, userId),
+    ]);
   } catch (err) {
     console.warn("DB read failed", err);
   }
@@ -67,7 +41,14 @@ export default async function LikedPage({ searchParams }: PageProps) {
 
   return (
     <>
-      <SourceStrip city={city} matchingCount={matchingCount} maxPrice={maxPrice} className="pt-4" />
+      <SourceStrip
+        city={city}
+        matchingCount={matchingCount}
+        maxPrice={maxPrice}
+        activeSource={source}
+        basePath="/liked"
+        className="pt-4"
+      />
       <div className="max-w-[1900px] mx-auto p-4 lg:p-8">
         <h1 className="font-display text-3xl mb-2">Shortlist</h1>
         <p className="text-sm text-ink-900/60 mb-8">
@@ -116,7 +97,7 @@ function Column({
   emoji: string;
   color: string;
   accent: string;
-  rows: Row[];
+  rows: LikedListingRow[];
   city: CityId;
 }) {
   return (
@@ -139,7 +120,7 @@ function Column({
   );
 }
 
-function ListingCard({ row, accent, city }: { row: Row; accent: string; city: CityId }) {
+function ListingCard({ row, accent, city }: { row: LikedListingRow; accent: string; city: CityId }) {
   const { listing } = row;
   const photos = (listing.photoUrls as string[] | null) ?? [];
   const sources = (listing.sources as any[] | null) ?? [];
@@ -162,7 +143,7 @@ function ListingCard({ row, accent, city }: { row: Row; accent: string; city: Ci
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={photo}
-            alt={listing.title}
+            alt={normalizeDisplayText(listing.title)}
             className="w-full h-full object-cover"
             loading="lazy"
           />
@@ -180,7 +161,7 @@ function ListingCard({ row, accent, city }: { row: Row; accent: string; city: Ci
           <div className="text-2xl font-bold drop-shadow-lg">{formatMoney(listing.price, city)}</div>
           {listing.neighborhood && (
             <div className="bg-white/95 text-ink-900 rounded-full px-2.5 py-1 text-xs font-semibold flex items-center gap-1 shadow-md">
-              <MapPin className="w-3 h-3" /> {listing.neighborhood}
+              <MapPin className="w-3 h-3" /> {normalizeDisplayText(listing.neighborhood)}
             </div>
           )}
         </div>
@@ -189,10 +170,10 @@ function ListingCard({ row, accent, city }: { row: Row; accent: string; city: Ci
       {/* Body */}
       <div className="p-4">
         <h3 className="font-display text-base leading-snug mb-1.5 line-clamp-2">
-          {listing.title}
+          {normalizeDisplayText(listing.title)}
         </h3>
         {listing.addressLine && (
-          <p className="text-xs text-ink-900/50 mb-2 truncate">{listing.addressLine}</p>
+          <p className="text-xs text-ink-900/50 mb-2 truncate">{normalizeDisplayText(listing.addressLine)}</p>
         )}
         <div className="flex gap-3 text-xs text-ink-900/70 mb-3 flex-wrap">
           {listing.bedrooms != null && (

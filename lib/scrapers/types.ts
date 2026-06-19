@@ -40,6 +40,30 @@ export interface ScrapeContext {
   city: "san-francisco" | "vancouver";
 }
 
+export type ScrapeProgressEvent =
+  | { type: "start"; city: ScrapeContext["city"]; sourceCount: number }
+  | { type: "source:start"; city: ScrapeContext["city"]; source: Source }
+  | { type: "source:done"; city: ScrapeContext["city"]; source: Source; raw: number; ms: number }
+  | { type: "source:error"; city: ScrapeContext["city"]; source: Source; error: string; ms: number }
+  | { type: "ingest:start"; city: ScrapeContext["city"]; raw: number }
+  | {
+      type: "ingest:done";
+      city: ScrapeContext["city"];
+      totalMerged: number;
+      newCount: number;
+      updatedCount: number;
+      unavailableCount: number;
+    }
+  | {
+      type: "done";
+      city: ScrapeContext["city"];
+      totalRaw: number;
+      totalMerged: number;
+      newCount: number;
+      updatedCount: number;
+      unavailableCount: number;
+    };
+
 export interface Scraper {
   source: Source;
   scrape(ctx: ScrapeContext): Promise<RawListing[]>;

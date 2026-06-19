@@ -3,12 +3,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { CityNav } from "@/components/city-nav";
+import { UserScope } from "@/components/user-scope";
 
 const SITE_URL = process.env.SITE_URL ?? "https://apt-tinder.viraat.dev";
 
 export const metadata: Metadata = {
   title: {
-    default: "apt·tinder — swipe apartments",
+    default: "apt·tinder - swipe apartments",
     template: "%s · apt·tinder",
   },
   description:
@@ -30,7 +31,7 @@ export const metadata: Metadata = {
     "apartment swipe",
   ],
   openGraph: {
-    title: "apt·tinder — swipe apartments",
+    title: "apt·tinder - swipe apartments",
     description:
       "Daily rental listings from Craigslist, Kijiji, PadMapper, Zumper, liv.rent, rentals.ca, and Facebook Marketplace.",
     url: SITE_URL,
@@ -55,6 +56,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className="min-h-screen">
+        <UserScope />
         <header className="border-b border-ink-100 bg-white/70 backdrop-blur sticky top-0 z-50">
           <div className="max-w-[1600px] mx-auto px-4 sm:px-6 min-h-14 py-2 flex flex-wrap gap-3 items-center justify-between">
             <Link href="/" className="font-display text-xl tracking-tight">

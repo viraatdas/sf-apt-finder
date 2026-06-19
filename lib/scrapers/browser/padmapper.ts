@@ -3,7 +3,7 @@ import type { RawListing, ScrapeContext } from "../types";
 import type { BrowserScraper } from "./index";
 
 /**
- * Padmapper — server-side rendered. Each page caps at ~22 listing cards.
+ * Padmapper is server-side rendered. Each page caps at ~22 listing cards.
  * Strategy: visit each SF neighborhood page, parse cards, filter to 3BR + ≤maxPrice.
  *
  * Card shape (from inspection):
@@ -49,10 +49,12 @@ export const padmapper: BrowserScraper = {
     const all: RawListing[] = [];
     const seen = new Set<string>();
     const now = new Date().toISOString();
+    const detailLimit = detailLimitFor(ctx);
+    let detailsChecked = 0;
 
     // Cap to ~8 neighborhoods to stay within reasonable runtime (~80s).
     // Iterate through them; later add more by setting PM_NEIGHBORHOODS env.
-    // Cover most of SF — ~15 neighborhoods runs in ~60s. Override with PM_NEIGHBORHOODS env.
+    // Cover most of SF. ~15 neighborhoods runs in ~60s. Override with PM_NEIGHBORHOODS env.
     const defaultPaths =
       ctx.city === "san-francisco" ? SF_NEIGHBORHOODS.slice(0, 15).join(",") : citySlug;
     const list = (process.env.PM_NEIGHBORHOODS ?? defaultPaths).split(",");
@@ -94,15 +96,15 @@ export const padmapper: BrowserScraper = {
           if (!a) continue;
           const text = (c.innerText ?? "").replace(/\n+/g, " | ").trim();
           // "VERIFIED | $4,595 | 2 Bedrooms · 1 Bathroom Apartment · Lower Haight | 677 Oak Street #8"
-          // OR a price range: "$2,450–$4,800 | Studio–2 Bedrooms"
-          const priceM = text.match(/\$\s*([\d,]+)(?:\s*[–\-]\s*\$?\s*([\d,]+))?/);
+          // OR a price range: "$2,450-$4,800 | Studio-2 Bedrooms"
+          const priceM = text.match(/\$\s*([\d,]+)(?:\s*[\u2013\-]\s*\$?\s*([\d,]+))?/);
           if (!priceM) continue;
           const priceA = parseInt(priceM[1].replace(/,/g, ""), 10);
           const priceB = priceM[2] ? parseInt(priceM[2].replace(/,/g, ""), 10) : priceA;
           // For range listings, use lowest price (the "from" price)
           const price = Math.min(priceA, priceB);
           // Bedroom: single value or range
-          const bedRange = text.match(/(\d+)\s*[–\-]\s*(\d+)\s*Bedrooms?/i);
+          const bedRange = text.match(/(\d+)\s*[\u2013\-]\s*(\d+)\s*Bedrooms?/i);
           const bedSingle = text.match(/(\d+)\s*Bedrooms?/i);
           const bedStudio = /\bStudio\b/i.test(text);
           let bedrooms: number | undefined;
@@ -125,7 +127,7 @@ export const padmapper: BrowserScraper = {
           const neighborhoodIn = segs
             .map((s) => s.match(/(?:· |\| )?([A-Z][\w\s\-']+?)(?: \| | San Francisco| Vancouver)/i))
             .find((m) => m)?.[1];
-          // Real photos live on img.zumpercdn.com — multiple <img> tags per card
+          // Real photos live on img.zumpercdn.com, multiple <img> tags per card.
           // (the first one is usually a carousel arrow SVG). Find by domain.
           const photos = Array.from(c.querySelectorAll("img"))
             .map((i: any) => i.currentSrc || i.src)
@@ -172,6 +174,12 @@ export const padmapper: BrowserScraper = {
         if (r.price > ctx.maxPrice) continue;
         seen.add(r.href);
         const slugId = r.href.match(/\/(?:rentals|buildings)\/([^/]+)/)?.[1] ?? r.href;
+        let photoUrls = (r.photoUrls ?? []) as string[];
+        if (detailsChecked < detailLimit) {
+          const detailPhotos = await scrapeDetailPhotos(page, r.href);
+          detailsChecked++;
+          photoUrls = Array.from(new Set([...photoUrls, ...detailPhotos])).slice(0, 12);
+        }
         // Title: bedroom/bath summary
         const title = r.addressLine ?? r.text.split("|")[1]?.trim() ?? "Padmapper listing";
         all.push({
@@ -184,7 +192,7 @@ export const padmapper: BrowserScraper = {
           bathrooms: r.bathrooms,
           sqft: r.sqft,
           addressLine: r.addressLine,
-          photoUrls: r.photoUrls ?? [],
+          photoUrls,
           scrapedAt: now,
         });
       }
@@ -193,3 +201,41 @@ export const padmapper: BrowserScraper = {
     return all;
   },
 };
+
+function detailLimitFor(ctx: ScrapeContext): number {
+  const parsed = Number(process.env.PM_DETAIL_LIMIT);
+  if (Number.isFinite(parsed) && parsed >= 0) return Math.floor(parsed);
+  return ctx.city === "vancouver" ? 45 : 20;
+}
+
+async function scrapeDetailPhotos(page: Page, url: string): Promise<string[]> {
+  try {
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 25000 });
+    await page.waitForTimeout(1800);
+    await page.evaluate(async () => {
+      window.scrollTo(0, document.body.scrollHeight / 2);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      window.scrollTo(0, 0);
+    });
+
+    return page.evaluate(() => {
+      const photos = new Set<string>();
+      for (const img of Array.from(document.querySelectorAll<HTMLImageElement>("img"))) {
+        const url = img.currentSrc || img.src;
+        if (/img\.zumpercdn\.com/i.test(url)) photos.add(url);
+      }
+
+      const html = document.documentElement.innerHTML;
+      for (const match of html.matchAll(/"media_id"\s*:\s*"?(\d+)"?/g)) {
+        photos.add(`https://img.zumpercdn.com/${match[1]}/1280x960`);
+      }
+      for (const match of html.matchAll(/"mediaId"\s*:\s*"?(\d+)"?/g)) {
+        photos.add(`https://img.zumpercdn.com/${match[1]}/1280x960`);
+      }
+
+      return Array.from(photos).slice(0, 12);
+    });
+  } catch {
+    return [];
+  }
+}

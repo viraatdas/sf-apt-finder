@@ -3,7 +3,7 @@ import type { RawListing, ScrapeContext } from "../types";
 import type { BrowserScraper } from "./index";
 
 /**
- * Zillow — heaviest bot defense. Stealth alone gets denied, but Zillow ships its
+ * Zillow has the heaviest bot defense. Stealth alone gets denied, but Zillow ships its
  * full result set inside <script id="__NEXT_DATA__"> when the page renders.
  * Strategy: render with stealth, extract from __NEXT_DATA__ even if visible UI
  * is gated by a soft block.

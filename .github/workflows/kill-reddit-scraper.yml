@@ -23,7 +23,7 @@ jobs:
         run: |
           set -e
           if [ -z "$APIFY_TOKEN" ]; then
-            echo "APIFY_TOKEN not set — nothing to do."; exit 0
+            echo "APIFY_TOKEN not set - nothing to do."; exit 0
           fi
           # Fetch the 30 most recent actor runs, filter for the reddit actor
           # in non-terminal states, and abort each.
@@ -36,7 +36,7 @@ jobs:
             | .id
           ' runs.json)
           if [ -z "$ACTIVE_IDS" ]; then
-            echo "no active reddit-scraper-lite runs — nothing to kill"
+            echo "no active reddit-scraper-lite runs - nothing to kill"
             exit 0
           fi
           for id in $ACTIVE_IDS; do

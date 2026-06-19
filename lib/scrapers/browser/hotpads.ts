@@ -3,7 +3,7 @@ import type { RawListing, ScrapeContext } from "../types";
 import type { BrowserScraper } from "./index";
 
 /**
- * HotPads — tiles have a [data-renderstrat] root with /pad URLs.
+ * HotPads tiles have a [data-renderstrat] root with /pad URLs.
  * Probe found 57+ tiles on a single page, no pagination needed for SF 3BR.
  */
 export const hotpads: BrowserScraper = {
@@ -46,7 +46,7 @@ export const hotpads: BrowserScraper = {
         seen.add(fullUrl);
 
         const text = tile.innerText ?? "";
-        const priceM = text.match(/\$\s*([\d,]+)(?:\s*[-–]\s*\$\s*([\d,]+))?/);
+        const priceM = text.match(/\$\s*([\d,]+)(?:\s*[-\u2013]\s*\$\s*([\d,]+))?/);
         if (!priceM) continue;
         const priceA = parseInt(priceM[1].replace(/,/g, ""), 10);
         const priceB = priceM[2] ? parseInt(priceM[2].replace(/,/g, ""), 10) : priceA;
@@ -115,7 +115,7 @@ async function enrichHotpadsPhotos(page: Page, listings: RawListing[]): Promise<
 
   const ctx = page.context();
   const CONCURRENCY = 3;
-  // Spawn dedicated worker pages — each uses the same stealth context so
+  // Spawn dedicated worker pages. Each uses the same stealth context so
   // headers/fingerprint pass the bot wall like the search page did.
   const workers = await Promise.all(
     Array.from({ length: Math.min(CONCURRENCY, need.length) }, () => ctx.newPage())
@@ -130,7 +130,7 @@ async function enrichHotpadsPhotos(page: Page, listings: RawListing[]): Promise<
         const l = need[i];
         try {
           await worker.goto(l.url, { waitUntil: "domcontentloaded", timeout: 15000 });
-          // Photos render in HTML quickly — no need to wait for full networkidle.
+          // Photos render in HTML quickly. No need to wait for full networkidle.
           await worker.waitForTimeout(800);
           const html = await worker.content();
           const matches = Array.from(html.matchAll(PHOTO_RX)).map((m) => m[0]);

@@ -11,7 +11,7 @@ ce.use(stealth());
 
 async function main() {
   const browser = await ce.launch({
-    headless: false, // PerimeterX checks for headless — try headed
+    headless: false, // PerimeterX checks for headless, try headed
     args: ["--disable-blink-features=AutomationControlled", "--no-sandbox"],
   });
   const ctx = await browser.newContext({
@@ -28,7 +28,7 @@ async function main() {
   let title = await page.title();
   console.log("initial title:", title);
   if (!/denied|press|robot/i.test(title)) {
-    console.log("no challenge — homepage already loaded clean!");
+    console.log("no challenge - homepage already loaded clean!");
     await browser.close();
     return;
   }

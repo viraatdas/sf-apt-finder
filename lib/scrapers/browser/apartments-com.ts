@@ -3,7 +3,7 @@ import type { RawListing, ScrapeContext } from "../types";
 import type { BrowserScraper } from "./index";
 
 /**
- * Apartments.com — render-then-scrape. Each listing card is an <article>
+ * Apartments.com render-then-scrape. Each listing card is an <article>
  * with data-listingid + structured price/address text inside.
  */
 export const apartmentsCom: BrowserScraper = {
@@ -32,7 +32,7 @@ export const apartmentsCom: BrowserScraper = {
         if (!href) continue;
 
         const text = art.innerText ?? "";
-        const priceM = text.match(/\$\s*([\d,]+)(?:\s*[-–]\s*\$\s*([\d,]+))?/);
+        const priceM = text.match(/\$\s*([\d,]+)(?:\s*[-\u2013]\s*\$\s*([\d,]+))?/);
         if (!priceM) continue;
         const priceA = parseInt(priceM[1].replace(/,/g, ""), 10);
         const priceB = priceM[2] ? parseInt(priceM[2].replace(/,/g, ""), 10) : priceA;

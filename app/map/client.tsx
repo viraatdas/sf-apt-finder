@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import { formatMoney } from "@/lib/utils";
+import { formatMoney, normalizeDisplayText } from "@/lib/utils";
 import type { Listing } from "@/lib/db/schema";
 import type { CityId } from "@/lib/cities";
 
@@ -53,7 +53,7 @@ export function MapPageClient({
       id: l.id,
       lat: l.lat!,
       lng: l.lng!,
-      title: l.title,
+      title: normalizeDisplayText(l.title),
       price: l.price ?? 0,
       neighborhood: l.neighborhood,
       decision: decisions[l.id] ?? null,
@@ -113,7 +113,7 @@ export function MapPageClient({
                     (neighborhood === name ? "bg-ink-900 text-white" : "hover:bg-ink-100")
                   }
                 >
-                  <span className="truncate">{name}</span>
+                  <span className="truncate">{normalizeDisplayText(name)}</span>
                   <span className="text-xs opacity-60 ml-2 shrink-0">
                     {items.length} · from {formatMoney(minPrice === Infinity ? null : minPrice, city)}
                   </span>

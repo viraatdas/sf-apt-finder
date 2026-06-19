@@ -1,5 +1,5 @@
 /**
- * Quick stealth test — fetch Zumper, Padmapper, Apartments.com, Zillow and report
+ * Quick stealth test: fetch Zumper, Padmapper, Apartments.com, Zillow and report
  * whether real listing data is visible past the bot challenge.
  */
 import { chromium as chromiumExtra } from "playwright-extra";
@@ -39,7 +39,7 @@ async function main() {
       const hasChallenge = /challenge|verify you are|are you a robot|press & hold/i.test(
         title + " " + bodyText
       );
-      // Probe for currency signs in body — strong signal that real listings rendered
+      // Probe for currency signs in body, a strong signal that real listings rendered
       const dollarCount = (bodyText.match(/\$/g) ?? []).length;
       console.log(
         `${name.padEnd(12)} title=${title.slice(0, 40).padEnd(40)}  $count=${dollarCount}  challenge=${hasChallenge}`

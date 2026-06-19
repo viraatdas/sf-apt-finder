@@ -1,20 +1,20 @@
 # apt-tinder
 
 Tinder-style review tool for 3BR SF apartments under $9k/mo.
-Scrapes daily, emails new finds, lets you swipe — left/right/up — on the web.
+Scrapes daily, emails new finds, lets you swipe left/right/up on the web.
 
 - **Right swipe / →** : Yes
 - **Left swipe / ←** : Nope
 - **Up swipe / ↑** : Maybe (uncertain)
 
-Sources: Craigslist (RSS, reliable), Zillow, Redfin, Realtor.com, Zumper (best-effort direct), Apartments.com, Trulia, PadMapper, HotPads, Facebook Marketplace, californiaapartments.com (via Apify — token optional).
+Sources: Craigslist (RSS, reliable), Zillow, Redfin, Realtor.com, Zumper, Apartments.com, Trulia, PadMapper, HotPads, Facebook Marketplace, californiaapartments.com (via Apify, token optional).
 
 Deduplicates across sources, tracks every price seen, geocodes via OpenStreetMap, categorizes by SF neighborhood, marks listings unavailable after 3 days of not appearing in any reliable source.
 
 ## Stack
 
 - **Next.js 15** (App Router) on Vercel
-- **Postgres** on Supabase (free tier — 500 MB is plenty)
+- **Postgres** on Supabase (free tier, 500 MB is plenty)
 - **Drizzle** ORM
 - **Resend** for daily digest email
 - **Leaflet + OpenStreetMap** for maps (zero API keys)
@@ -64,9 +64,9 @@ Vercel will tell you the CNAME to add at your DNS provider (`cname.vercel-dns.co
 
 ### Cron
 
-`vercel.json` schedules `/api/cron` at `5 14 * * *` UTC = **7:05 AM PT during PDT** (Mar–Nov).
-During PST (Nov–Mar), 7:05 AM PT is `5 15 * * *`. Vercel Cron uses UTC and does not auto-adjust
-for DST — adjust manually twice a year or just live with it landing at 6:05 AM half the year.
+`vercel.json` schedules `/api/cron` at `5 14 * * *` UTC = **7:05 AM PT during PDT** (Mar-Nov).
+During PST (Nov-Mar), 7:05 AM PT is `5 15 * * *`. Vercel Cron uses UTC and does not auto-adjust
+for DST, so adjust manually twice a year or leave it landing at 6:05 AM half the year.
 
 > Note: Hobby plan caps function timeout at 60s. The full scrape may exceed that.
 > Upgrade to Pro for 300s, or trim sources / move heavy scrapes to a separate worker.
@@ -103,7 +103,7 @@ Until then, sends from `onboarding@resend.dev` only reach the Resend account own
 To enable the Apify-backed sources, sign up at https://apify.com (free tier ~ 1k actor runs/mo),
 grab a token, and set `APIFY_TOKEN`. Actor IDs are in [`lib/scrapers/apify.ts`](lib/scrapers/apify.ts).
 
-If a source goes silent the orchestrator logs the failure to `scrape_runs` and keeps going —
+If a source goes silent the orchestrator logs the failure to `scrape_runs` and keeps going,
 nothing else breaks.
 
 ## 6. Deduplication
@@ -144,21 +144,21 @@ curl -H "Authorization: Bearer $CRON_SECRET" https://apt-tinder.viraat.dev/api/c
 
 ```
 app/
-  page.tsx               — Swipe deck (default route)
-  map/                   — Map view, sidebar grouped by neighborhood
-  liked/                 — Yes / Maybe / Nope columns
-  api/cron/route.ts      — Daily scrape + email
-  api/listings/route.ts  — Listings feed
-  api/decisions/route.ts — Save / undo swipes
+  page.tsx               - Swipe deck (default route)
+  map/                   - Map view, sidebar grouped by neighborhood
+  liked/                 - Yes / Maybe / Nope columns
+  api/cron/route.ts      - Daily scrape + email
+  api/listings/route.ts  - Listings feed
+  api/decisions/route.ts - Save / undo swipes
 lib/
-  db/                    — Drizzle schema + client
-  scrapers/              — One file per source + orchestrator
-  dedup.ts               — Canonical ID + merge
-  geocode.ts             — Nominatim wrapper (rate-limited)
-  neighborhoods.ts       — SF bbox lookup
-  email.ts               — Resend digest composer
+  db/                    - Drizzle schema + client
+  scrapers/              - One file per source + orchestrator
+  dedup.ts               - Canonical ID + merge
+  geocode.ts             - Nominatim wrapper (rate-limited)
+  neighborhoods.ts       - SF bbox lookup
+  email.ts               - Resend digest composer
 components/
-  swipe-deck.tsx         — Tinder UI w/ left/right/up gestures
-  listing-map.tsx        — Leaflet map + price pins
-vercel.json              — Daily cron
+  swipe-deck.tsx         - Tinder UI w/ left/right/up gestures
+  listing-map.tsx        - Leaflet map + price pins
+vercel.json              - Daily cron
 ```

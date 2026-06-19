@@ -4,7 +4,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import type { ScrapeResult } from "./scrapers";
 import { checkApifyBalance, type ApifyBalance } from "./apify-balance";
 import { CITIES, DEFAULT_CITY, type CityId } from "./cities";
-import { formatMoney } from "./utils";
+import { formatMoney, normalizeDisplayText } from "./utils";
 
 const FROM = process.env.EMAIL_FROM ?? "apt-tinder <onboarding@resend.dev>";
 
@@ -105,7 +105,7 @@ function sourceOf(r: typeof schema.listings.$inferSelect): string {
   return ((r.sources as any[] | null)?.[0]?.source as string) ?? "unknown";
 }
 
-/** Pick 3 featured — STRICTLY from different sources when possible. */
+/** Pick 3 featured, strictly from different sources when possible. */
 function pickFeatured(rows: (typeof schema.listings.$inferSelect)[], city: CityId): Featured[] {
   if (!rows.length) return [];
   // Group by source; pick the highest-scored from each
@@ -209,15 +209,15 @@ function renderText(
   if (featured.length) {
     lines.push("== Featured ==");
     for (const f of featured) {
-      lines.push(`  ${formatMoney(f.price, city)} · ${f.neighborhood ?? "—"} · ${f.source}`);
-      lines.push(`    ${f.title}`);
+      lines.push(`  ${formatMoney(f.price, city)} · ${f.neighborhood ?? "Unknown"} · ${f.source}`);
+      lines.push(`    ${normalizeDisplayText(f.title)}`);
       lines.push(`    ${f.url}\n`);
     }
   }
   if (more.length) {
     lines.push(`== ${more.length} more ==`);
     for (const it of more) {
-      lines.push(`  ${formatMoney(it.price, city)} · ${it.neighborhood ?? "—"} · ${it.source} · ${it.title}`);
+      lines.push(`  ${formatMoney(it.price, city)} · ${it.neighborhood ?? "Unknown"} · ${it.source} · ${normalizeDisplayText(it.title)}`);
     }
     lines.push("");
   }
@@ -276,7 +276,7 @@ function renderHtml(
       ${featuredHtml ? `
       <div>
         <h2 style="font:600 16px -apple-system,sans-serif;margin:8px 0 14px 4px;color:#0a0a0c">
-          ⭐ Featured — one from each site
+          ⭐ Featured: one from each site
         </h2>
         ${featuredHtml}
       </div>` : ""}
@@ -316,11 +316,11 @@ function renderFeatured(f: Featured, city: CityId): string {
           <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:6px">
             <div style="font:700 24px ui-serif,Georgia,serif">${formatMoney(f.price, city)}<span style="font-size:13px;color:#888;font-weight:400"> /mo</span></div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
-              ${f.neighborhood ? `<span style="background:#0a0a0c;color:#fff;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:600">📍 ${escape(f.neighborhood)}</span>` : ""}
+              ${f.neighborhood ? `<span style="background:#0a0a0c;color:#fff;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:600">📍 ${escape(normalizeDisplayText(f.neighborhood))}</span>` : ""}
               <span style="background:#ec4899;color:#fff;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:600">${escape(f.source)}</span>
             </div>
           </div>
-          <div style="font-size:13px;color:#444;line-height:1.4;margin-bottom:6px">${escape(f.title)}</div>
+          <div style="font-size:13px;color:#444;line-height:1.4;margin-bottom:6px">${escape(normalizeDisplayText(f.title))}</div>
           ${f.addressLine ? `<div style="font-size:12px;color:#888;margin-bottom:6px">${escape(f.addressLine)}</div>` : ""}
           ${specs.length ? `<div style="font-size:12px;color:#666;font-weight:600;margin-bottom:8px">${specs.join(" · ")}</div>` : ""}
           ${renderContactInline(f)}
@@ -357,9 +357,9 @@ function renderRow(it: MoreItem, isLast: boolean, city: CityId): string {
               <td style="width:64px;padding-right:14px;vertical-align:middle">${thumb}</td>
               <td style="vertical-align:middle">
                 <div style="font:700 17px -apple-system,sans-serif;margin-bottom:2px">${formatMoney(it.price, city)}<span style="font-size:12px;color:#888;font-weight:400"> /mo</span></div>
-                <div style="font-size:12px;color:#555;line-height:1.35;margin-bottom:2px">${escape(it.title).slice(0, 90)}</div>
+                <div style="font-size:12px;color:#555;line-height:1.35;margin-bottom:2px">${escape(normalizeDisplayText(it.title)).slice(0, 90)}</div>
                 <div style="font-size:11px;color:#888">
-                  ${it.neighborhood ? `📍 ${escape(it.neighborhood)} · ` : ""}${escape(it.source)}
+                  ${it.neighborhood ? `📍 ${escape(normalizeDisplayText(it.neighborhood))} · ` : ""}${escape(it.source)}
                 </div>
               </td>
             </tr>

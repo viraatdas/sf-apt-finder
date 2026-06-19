@@ -1,61 +1,48 @@
-import { and, desc, eq, lte, sql } from "drizzle-orm";
 import { cityFromParam, maxPriceFromParam } from "@/lib/cities";
-import { db, schema } from "@/lib/db";
+import { schema } from "@/lib/db";
 import { SourceStrip } from "@/components/source-strip";
+import { sourceFromParam } from "@/lib/sources";
+import { countMatchingListings, listAvailableListings, listDecisionMap, type DecisionValue } from "@/lib/listings/query";
+import { currentUserId } from "@/lib/server-user";
 import { MapPageClient } from "./client";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type PageProps = {
-  searchParams: Promise<{ city?: string; maxPrice?: string }>;
+  searchParams: Promise<{ city?: string; maxPrice?: string; source?: string }>;
 };
 
 export default async function MapPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const city = cityFromParam(params.city);
   const maxPrice = maxPriceFromParam(city, params.maxPrice);
+  const source = sourceFromParam(city, params.source);
   let listings: (typeof schema.listings.$inferSelect)[] = [];
-  let decisions: { listingId: string; decision: "yes" | "no" | "maybe" }[] = [];
+  let decisionMap: Record<string, DecisionValue> = {};
   let matchingCount = 0;
   try {
-    const [matching] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(schema.listings)
-      .where(
-        and(
-          eq(schema.listings.status, "available"),
-          eq(schema.listings.city, city),
-          lte(schema.listings.price, maxPrice)
-        )
-      );
-    matchingCount = matching?.count ?? 0;
-
-    listings = await db
-      .select()
-      .from(schema.listings)
-      .where(
-        and(
-          eq(schema.listings.status, "available"),
-          eq(schema.listings.city, city),
-          lte(schema.listings.price, maxPrice)
-        )
-      )
-      .orderBy(desc(schema.listings.firstSeenAt))
-      .limit(500);
-    decisions = (await db
-      .select({ listingId: schema.decisions.listingId, decision: schema.decisions.decision })
-      .from(schema.decisions)
-      .where(eq(schema.decisions.userId, "household"))) as any;
+    const filters = { city, maxPrice, source };
+    const userId = await currentUserId();
+    [matchingCount, listings, decisionMap] = await Promise.all([
+      countMatchingListings(filters),
+      listAvailableListings(filters, 500),
+      listDecisionMap(userId),
+    ]);
   } catch (err) {
     console.warn("DB read failed", err);
   }
 
-  const decisionMap: Record<string, "yes" | "no" | "maybe"> = {};
-  for (const d of decisions) decisionMap[d.listingId] = d.decision;
   return (
     <>
-      <SourceStrip city={city} matchingCount={matchingCount} maxPrice={maxPrice} className="pt-4" />
+      <SourceStrip
+        city={city}
+        matchingCount={matchingCount}
+        maxPrice={maxPrice}
+        activeSource={source}
+        basePath="/map"
+        className="pt-4"
+      />
       <MapPageClient listings={listings} decisions={decisionMap} city={city} />
     </>
   );

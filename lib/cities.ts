@@ -96,8 +96,10 @@ export function citySearchParams(city: CityId): string {
 }
 
 export function maxPriceFromParam(city: CityId, value: string | null | undefined): number {
+  const config = CITIES[city];
   const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : CITIES[city].defaultMaxPrice;
+  const maxPrice = Number.isFinite(parsed) && parsed > 0 ? parsed : config.defaultMaxPrice;
+  return Math.min(maxPrice, config.defaultMaxPrice);
 }
 
 export function contextDefaults(city: CityId) {
@@ -120,10 +122,12 @@ export function contextFromEnv(overrides: Partial<ReturnType<typeof contextDefau
     process.env.SEARCH_MAX_PRICE != null && process.env.SEARCH_MAX_PRICE !== ""
       ? Number(process.env.SEARCH_MAX_PRICE)
       : undefined;
-  const bedrooms =
+  const rawBedrooms =
     overrides.bedrooms !== undefined ? overrides.bedrooms : (envBedrooms ?? config.defaultBedrooms);
-  const maxPrice =
+  const bedrooms = city === "vancouver" ? null : rawBedrooms;
+  const rawMaxPrice =
     overrides.maxPrice !== undefined ? overrides.maxPrice : (envMaxPrice ?? config.defaultMaxPrice);
+  const maxPrice = Math.min(rawMaxPrice, config.defaultMaxPrice);
   return {
     city,
     bedrooms: Number.isFinite(bedrooms) ? bedrooms : null,
