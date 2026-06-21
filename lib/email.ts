@@ -77,7 +77,7 @@ export async function sendDailyDigest(
   const { data, error } = await resend.emails.send({
     from: FROM,
     to: recipients,
-    subject: `${cityConfig.name} Apt Finder`,
+    subject: "Apt Tinder by Viraat",
     html,
     text,
   });
