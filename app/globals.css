@@ -28,6 +28,59 @@ body {
   scrollbar-width: none;
 }
 
+/* Max-price slider: filled track via inline gradient + larger grabbable thumb */
+.price-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 999px;
+  outline: none;
+  cursor: pointer;
+}
+.price-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #fff;
+  border: 2px solid #0a0a0c;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  cursor: grab;
+  transition: transform 0.1s ease;
+}
+.price-slider:active::-webkit-slider-thumb {
+  transform: scale(1.18);
+  cursor: grabbing;
+}
+.price-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #fff;
+  border: 2px solid #0a0a0c;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  cursor: grab;
+}
+.price-slider::-moz-range-track {
+  background: transparent;
+}
+.price-slider:focus-visible {
+  box-shadow: 0 0 0 3px rgba(10, 10, 12, 0.2);
+}
+
+/* Pulsing ring behind the current listing's map marker */
+@keyframes aptPinPulse {
+  0% {
+    transform: scale(0.7);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
 /* Leaflet z-index fixes so cards float above the map */
 .leaflet-pane,
 .leaflet-control {

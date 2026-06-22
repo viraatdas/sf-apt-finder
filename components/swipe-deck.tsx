@@ -26,7 +26,7 @@ import { useSearchParams } from "next/navigation";
 import { formatMoney, normalizeDisplayText } from "@/lib/utils";
 import type { Listing } from "@/lib/db/schema";
 import type { CityId } from "@/lib/cities";
-import { sourceLabel } from "@/lib/sources";
+import { sourceFromParam, sourceLabel } from "@/lib/sources";
 import { getOrCreateUserId } from "@/components/user-scope";
 
 const ListingMap = dynamic(() => import("./listing-map").then((m) => m.ListingMap), {
@@ -316,6 +316,17 @@ const SwipeCard = forwardRef<CardHandle, {
   const sources = (listing.sources as any[] | null) ?? [];
   const prices = (listing.pricesBySource as Record<string, number> | null) ?? {};
   const searchParams = useSearchParams();
+  const activeSource = sourceFromParam(city, searchParams.get("source"));
+
+  // When a source filter is active, surface that source on the card: list its
+  // tag first, and price the listing using that source's quote when we have it.
+  const orderedSources = activeSource
+    ? [...sources].sort(
+        (a, b) => Number(b.source === activeSource) - Number(a.source === activeSource)
+      )
+    : sources;
+  const displayPrice =
+    activeSource && prices[activeSource] != null ? prices[activeSource] : listing.price;
 
   function sourceFilterHref(source: string) {
     const params = new URLSearchParams(searchParams.toString());
@@ -503,9 +514,11 @@ const SwipeCard = forwardRef<CardHandle, {
           <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent text-white flex items-end justify-between gap-2 pointer-events-none">
             <div>
               <div className="text-4xl font-bold leading-none drop-shadow-lg">
-                {formatMoney(listing.price, city)}
+                {formatMoney(displayPrice, city)}
               </div>
-              <div className="text-xs opacity-80 mt-1">per month</div>
+              <div className="text-xs opacity-80 mt-1">
+                per month{activeSource ? ` · ${sourceLabel(activeSource)}` : ""}
+              </div>
             </div>
             {listing.neighborhood && (
               <div className="bg-white/95 text-ink-900 rounded-full px-3 py-1.5 text-sm font-semibold flex items-center gap-1 shadow-md">
@@ -594,38 +607,52 @@ const SwipeCard = forwardRef<CardHandle, {
             </div>
           )}
 
-          <div className="flex gap-1.5 flex-wrap">
-            {sources.map((s, i) => (
-              <span
-                key={i}
-                className="inline-flex items-center overflow-hidden rounded-full bg-ink-100 text-xs"
-              >
-                {isTop ? (
-                  <>
-                    <Link
-                      href={sourceFilterHref(s.source)}
-                      onClick={(e) => e.stopPropagation()}
-                      className="px-2.5 py-1 font-medium hover:bg-ink-100/70"
-                      title={`Filter to ${sourceLabel(s.source)}`}
-                    >
-                      {sourceLabel(s.source)}
-                    </Link>
-                    <a
-                      href={s.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      aria-label={`Open ${sourceLabel(s.source)} listing`}
-                      onClick={(e) => e.stopPropagation()}
-                      className="px-2 py-1 border-l border-white/80 hover:bg-ink-100/70"
-                    >
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
-                  </>
-                ) : (
-                  <span className="px-2.5 py-1 font-medium">{sourceLabel(s.source)}</span>
-                )}
-              </span>
-            ))}
+          <div className="flex gap-1.5 flex-wrap items-center">
+            {orderedSources.map((s, i) => {
+              const isActive = activeSource != null && s.source === activeSource;
+              return (
+                <span
+                  key={i}
+                  className={
+                    "inline-flex items-center overflow-hidden rounded-full text-xs " +
+                    (isActive ? "bg-ink-900 text-white" : "bg-ink-100")
+                  }
+                >
+                  {isTop ? (
+                    <>
+                      <Link
+                        href={sourceFilterHref(s.source)}
+                        onClick={(e) => e.stopPropagation()}
+                        className={
+                          "px-2.5 py-1 font-medium " +
+                          (isActive ? "hover:bg-ink-900/85" : "hover:bg-ink-100/70")
+                        }
+                        title={`Filter to ${sourceLabel(s.source)}`}
+                      >
+                        {sourceLabel(s.source)}
+                      </Link>
+                      <a
+                        href={s.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label={`Open ${sourceLabel(s.source)} listing`}
+                        onClick={(e) => e.stopPropagation()}
+                        className={
+                          "px-2 py-1 border-l " +
+                          (isActive
+                            ? "border-white/30 hover:bg-ink-900/85"
+                            : "border-white/80 hover:bg-ink-100/70")
+                        }
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </>
+                  ) : (
+                    <span className="px-2.5 py-1 font-medium">{sourceLabel(s.source)}</span>
+                  )}
+                </span>
+              );
+            })}
           </div>
         </div>
       </div>

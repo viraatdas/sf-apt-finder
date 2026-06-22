@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { CityId } from "@/lib/cities";
 import { moveFocusWithArrowKeys } from "@/components/arrow-key-nav";
-import { configuredSourcesForCity } from "@/lib/sources";
+import { configuredSourcesForCity, sourceLabel } from "@/lib/sources";
 import { formatMoney } from "@/lib/utils";
 import type { Source } from "@/lib/scrapers/types";
 
@@ -75,6 +75,21 @@ export function SourceStrip({
           </Link>
         ))}
       </div>
+      {activeSource && (
+        <div className="mt-2 flex items-center gap-2 rounded-lg border border-ink-900/15 bg-ink-900/5 px-3 py-1.5 text-xs text-ink-900">
+          <span className="font-semibold">Filtered to {sourceLabel(activeSource)}</span>
+          <span className="text-ink-900/55">
+            — showing listings posted on {sourceLabel(activeSource)}.
+          </span>
+          <Link
+            href={hrefFor(null)}
+            data-arrow-nav-item
+            className="ml-auto inline-flex h-6 items-center rounded-full border border-ink-100 bg-white px-2.5 font-medium hover:bg-ink-50 focus:outline-none focus:ring-2 focus:ring-ink-900/20"
+          >
+            Clear
+          </Link>
+        </div>
+      )}
     </section>
   );
 }

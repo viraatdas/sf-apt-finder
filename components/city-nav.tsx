@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Mail, SlidersHorizontal } from "lucide-react";
+import { SlidersHorizontal } from "lucide-react";
 import { moveFocusWithArrowKeys } from "@/components/arrow-key-nav";
 import { CITIES, CITY_IDS, cityFromParam, maxPriceFromParam, type CityId } from "@/lib/cities";
 
@@ -12,6 +12,11 @@ const NAV_ITEMS = [
   { href: "/map", label: "Map" },
   { href: "/liked", label: "Shortlist" },
 ] as const;
+
+const CITY_FLAGS: Record<CityId, string> = {
+  "san-francisco": "🇺🇸",
+  vancouver: "🇨🇦",
+};
 
 export function CityNav() {
   const pathname = usePathname();
@@ -66,30 +71,47 @@ export function CityNav() {
     };
   }, []);
 
+  const pricePct = ((priceInput - priceMin) / (priceMax - priceMin)) * 100;
+
   return (
     <nav
       aria-label="Primary"
       onKeyDown={moveFocusWithArrowKeys}
       className="flex flex-wrap gap-1.5 text-sm items-center justify-end"
     >
-      <select
-        aria-label="City"
-        value={city}
-        onChange={(event) => changeCity(event.target.value as CityId)}
-        className="h-9 rounded-full border border-ink-100 bg-white px-3 text-sm font-medium hover:bg-ink-50"
-      >
-        {CITY_IDS.map((cityId) => (
-          <option key={cityId} value={cityId}>
-            {CITIES[cityId].name}
-          </option>
-        ))}
-      </select>
       <div
-        className="flex items-center gap-2 rounded-full border border-ink-100 bg-white px-3 py-1.5"
+        role="group"
+        aria-label="City"
+        className="flex items-center rounded-full border border-ink-100 bg-ink-50 p-0.5"
       >
+        {CITY_IDS.map((cityId) => {
+          const active = cityId === city;
+          return (
+            <button
+              key={cityId}
+              type="button"
+              onClick={() => changeCity(cityId)}
+              aria-pressed={active}
+              className={
+                "inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-ink-900/20 " +
+                (active
+                  ? "bg-ink-900 text-white shadow-sm"
+                  : "text-ink-900/60 hover:text-ink-900 hover:bg-white")
+              }
+            >
+              <span aria-hidden="true">{CITY_FLAGS[cityId]}</span>
+              {CITIES[cityId].name}
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex items-center gap-2.5 rounded-full border border-ink-100 bg-white px-3.5 py-1.5">
         <SlidersHorizontal className="h-4 w-4 text-ink-900/45" aria-hidden="true" />
-        <label className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-ink-900/60 whitespace-nowrap">Max price</span>
+        <label className="flex items-center gap-2.5">
+          <span className="text-xs font-semibold text-ink-900/60 whitespace-nowrap">Max</span>
+          <span className="text-[10px] text-ink-900/35 tabular-nums">
+            ${(priceMin / 1000).toFixed(1)}k
+          </span>
           <input
             ref={priceInputRef}
             aria-label="Max price"
@@ -97,13 +119,22 @@ export function CityNav() {
             type="range"
             min={priceMin}
             max={priceMax}
-            step={100}
+            step={50}
             value={priceInput}
             onInput={(event) => setPriceInput(Number(event.currentTarget.value))}
             onChange={(event) => setPriceInput(Number(event.target.value))}
-            className="h-2 w-28 accent-ink-900"
+            className="price-slider w-36 sm:w-44"
+            style={{
+              background: `linear-gradient(to right, #0a0a0c 0%, #0a0a0c ${pricePct}%, #ececef ${pricePct}%, #ececef 100%)`,
+            }}
           />
-          <output className="w-16 text-right text-sm font-semibold tabular-nums" aria-live="polite">
+          <span className="text-[10px] text-ink-900/35 tabular-nums">
+            ${(priceMax / 1000).toFixed(0)}k
+          </span>
+          <output
+            className="w-[4.5rem] text-right text-sm font-bold tabular-nums text-ink-900"
+            aria-live="polite"
+          >
             ${priceInput.toLocaleString()}
           </output>
         </label>
@@ -118,16 +149,6 @@ export function CityNav() {
           {item.label}
         </Link>
       ))}
-      <a
-        href="mailto:viraat@exla.ai?subject=apt-tinder"
-        data-arrow-nav-item
-        aria-label="Email viraat@exla.ai"
-        title="viraat@exla.ai"
-        className="ml-1 px-3 py-1.5 rounded-full bg-accent-yes/10 text-accent-yes hover:bg-accent-yes/20 font-medium inline-flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-accent-yes/30"
-      >
-        <Mail className="h-3.5 w-3.5" aria-hidden="true" />
-        Contact
-      </a>
     </nav>
   );
 }

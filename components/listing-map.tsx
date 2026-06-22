@@ -67,6 +67,37 @@ function PriceIcon({
   });
 }
 
+// The listing currently on the swipe card gets a much louder marker: a photo
+// thumbnail, a price badge, a downward pointer to the exact spot, and a pulsing
+// ring — so it's unmistakable where "this listing" sits on the map.
+function CurrentIcon({
+  price,
+  photoUrl,
+  city,
+}: {
+  price: number;
+  photoUrl?: string;
+  city: CityId;
+}) {
+  const label = `$${(price / 1000).toFixed(1)}k${CITIES[city].currency === "CAD" ? " CAD" : ""}`;
+  const inner = photoUrl
+    ? `<img src="${photoUrl}" style="width:100%;height:100%;object-fit:cover;display:block;" />`
+    : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:24px;">🏠</div>`;
+  const html = `<div style="position:relative;display:flex;flex-direction:column;align-items:center;filter:drop-shadow(0 6px 10px rgba(0,0,0,.35));">
+    <span style="position:absolute;top:6px;width:58px;height:58px;border-radius:999px;background:rgba(236,72,153,.35);animation:aptPinPulse 1.6s ease-out infinite;"></span>
+    <div style="position:relative;width:64px;height:64px;border-radius:16px;overflow:hidden;border:3px solid #ec4899;background:#f1f5f9;">${inner}</div>
+    <div style="position:relative;margin-top:-9px;background:#ec4899;color:#fff;padding:2px 9px;border-radius:999px;font:800 11px -apple-system,sans-serif;white-space:nowrap;border:2px solid #fff;">${label}</div>
+    <div style="width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-top:10px solid #ec4899;margin-top:-1px;"></div>
+  </div>`;
+  return L.divIcon({
+    html,
+    className: "",
+    iconSize: [72, 96],
+    iconAnchor: [36, 96],
+    popupAnchor: [0, -90],
+  });
+}
+
 function FlyTo({ lat, lng }: { lat?: number; lng?: number }) {
   const map = useMap();
   useEffect(() => {
@@ -115,11 +146,14 @@ export function ListingMap({
               : p.decision === "maybe"
                 ? "#f59e0b" // amber
                 : "#94a3b8"; // muted slate gray for undecided
+        const icon = p.highlighted
+          ? CurrentIcon({ price: p.price, photoUrl: p.photoUrl, city })
+          : PriceIcon({ price: p.price, color, highlighted: p.highlighted, city });
         return (
           <Marker
             key={p.id}
             position={[p.lat, p.lng]}
-            icon={PriceIcon({ price: p.price, color, highlighted: p.highlighted, city }) as any}
+            icon={icon as any}
             zIndexOffset={p.highlighted ? 1000 : 0}
           >
             <Popup>
