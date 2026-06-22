@@ -6,7 +6,7 @@ import { checkApifyBalance, type ApifyBalance } from "./apify-balance";
 import { CITIES, DEFAULT_CITY, type CityId } from "./cities";
 import { formatMoney, normalizeDisplayText, upgradePhotoUrl } from "./utils";
 
-const FROM = process.env.EMAIL_FROM ?? "apt-tinder <onboarding@resend.dev>";
+const FROM = process.env.EMAIL_FROM?.trim() || "Apt Tinder by Viraat <onboarding@resend.dev>";
 
 const MORE_LIMIT = 10;
 
