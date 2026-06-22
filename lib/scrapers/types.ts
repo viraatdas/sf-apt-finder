@@ -37,7 +37,7 @@ export interface RawListing {
 export interface ScrapeContext {
   bedrooms: number | null;
   maxPrice: number;
-  city: "san-francisco" | "vancouver";
+  city: "san-francisco" | "vancouver" | "columbus";
 }
 
 export type ScrapeProgressEvent =

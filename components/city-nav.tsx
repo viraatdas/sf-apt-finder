@@ -16,6 +16,7 @@ const NAV_ITEMS = [
 const CITY_FLAGS: Record<CityId, string> = {
   "san-francisco": "🇺🇸",
   vancouver: "🇨🇦",
+  columbus: "🇺🇸",
 };
 
 export function CityNav() {

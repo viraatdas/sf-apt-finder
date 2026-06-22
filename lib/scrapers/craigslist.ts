@@ -25,6 +25,7 @@ const ENRICH_BUDGET = Number(process.env.CL_ENRICH_BUDGET ?? 200);
 const SEARCH_URLS = {
   "san-francisco": "https://sfbay.craigslist.org/search/sfc/apa",
   vancouver: "https://vancouver.craigslist.org/search/van/apa",
+  columbus: "https://columbus.craigslist.org/search/apa",
 } as const;
 
 export const craigslist: Scraper = {

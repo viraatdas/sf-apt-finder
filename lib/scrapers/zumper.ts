@@ -7,6 +7,7 @@ import type { RawListing, Scraper, ScrapeContext } from "./types";
 const SEARCH_SLUGS = {
   "san-francisco": "san-francisco-ca",
   vancouver: "vancouver-bc",
+  columbus: "columbus-oh",
 } as const;
 
 export const zumper: Scraper = {

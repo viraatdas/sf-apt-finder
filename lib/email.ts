@@ -120,7 +120,9 @@ function pickFeatured(rows: (typeof schema.listings.$inferSelect)[], city: CityI
   const preferredOrder =
     city === "vancouver"
       ? ["kijiji", "craigslist", "livrent", "rentals-ca", "padmapper", "zumper", "facebook"]
-      : ["zillow", "apartments-com", "trulia", "padmapper", "craigslist", "hotpads"];
+      : city === "columbus"
+        ? ["zillow", "craigslist", "zumper"]
+        : ["zillow", "apartments-com", "trulia", "padmapper", "craigslist", "hotpads"];
   const picks: typeof schema.listings.$inferSelect[] = [];
   for (const src of preferredOrder) {
     if (picks.length >= 3) break;

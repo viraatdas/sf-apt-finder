@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runAllScrapers } from "@/lib/scrapers";
 import { sendDailyDigest } from "@/lib/email";
-import { activeCities, contextDefaults } from "@/lib/cities";
+import { activeCities, contextDefaults, isCityId, type CityId } from "@/lib/cities";
 import { formatScrapeProgress } from "@/lib/scrapers/progress";
 
 export const maxDuration = 300; // 5 minutes.
@@ -15,8 +15,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
+  // Optional ?city=<id> restricts the run to a single city (and sends only that
+  // city's digest). Defaults to all active cities.
+  const cityParam = req.nextUrl.searchParams.get("city");
+  const onlyCity = cityParam && isCityId(cityParam) ? cityParam : undefined;
+
   if (req.nextUrl.searchParams.get("json") === "1") {
-    const result = await runCron((message) => console.log(message));
+    const result = await runCron((message) => console.log(message), onlyCity);
     return NextResponse.json(result, { status: result.ok ? 200 : 500 });
   }
 
@@ -26,7 +31,7 @@ export async function GET(req: NextRequest) {
       const write = (message: string) => {
         controller.enqueue(encoder.encode(`${new Date().toISOString()} ${message}\n`));
       };
-      const result = await runCron(write);
+      const result = await runCron(write, onlyCity);
       write(`summary ${JSON.stringify(result)}`);
       controller.close();
     },
@@ -41,9 +46,9 @@ export async function GET(req: NextRequest) {
   });
 }
 
-async function runCron(write: (message: string) => void) {
+async function runCron(write: (message: string) => void, onlyCity?: CityId) {
   const siteUrl = process.env.SITE_URL ?? "https://apt-tinder.viraat.dev";
-  const cities = activeCities();
+  const cities = onlyCity ? [onlyCity] : activeCities();
   const results = [];
   let ok = true;
 

@@ -40,6 +40,7 @@ const SF_NEIGHBORHOODS = [
 const CITY_SLUGS = {
   "san-francisco": "san-francisco-ca",
   vancouver: "vancouver-bc",
+  columbus: "columbus-oh",
 } as const;
 
 export const padmapper: BrowserScraper = {

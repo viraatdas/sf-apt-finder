@@ -75,11 +75,13 @@ const SEARCH_URLS = {
 const LOCATION_BY_CITY = {
   "san-francisco": "San Francisco, CA",
   vancouver: "Vancouver, BC",
+  columbus: "Columbus, OH",
 } as const;
 
 const FACEBOOK_CITY_SLUG_BY_CITY = {
   "san-francisco": "sanfrancisco",
   vancouver: "vancouver",
+  columbus: "columbus",
 } as const;
 
 const APIFY_PROXY_BY_CITY = {
@@ -92,6 +94,11 @@ const APIFY_PROXY_BY_CITY = {
     useApifyProxy: true,
     apifyProxyGroups: ["RESIDENTIAL"],
     apifyProxyCountry: "CA",
+  },
+  columbus: {
+    useApifyProxy: true,
+    apifyProxyGroups: ["RESIDENTIAL"],
+    apifyProxyCountry: "US",
   },
 } as const;
 

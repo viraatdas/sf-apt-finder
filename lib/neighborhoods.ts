@@ -68,9 +68,11 @@ export const VANCOUVER_NEIGHBORHOODS: Neighborhood[] = [
 export function neighborhoodFor(
   lat?: number | null,
   lng?: number | null,
-  city: "san-francisco" | "vancouver" = "san-francisco"
+  city: "san-francisco" | "vancouver" | "columbus" = "san-francisco"
 ): string | undefined {
   if (lat == null || lng == null) return undefined;
+  // No neighborhood polygons mapped for Columbus yet — leave uncategorized.
+  if (city === "columbus") return undefined;
   const neighborhoods = city === "vancouver" ? VANCOUVER_NEIGHBORHOODS : SF_NEIGHBORHOODS;
   for (const n of neighborhoods) {
     const [minLng, minLat, maxLng, maxLat] = n.bbox;
@@ -106,7 +108,7 @@ const VANCOUVER_LOCATION_ALIASES: Record<string, { lat: number; lng: number }> =
 
 export function approximateLocationFor(
   text: string | null | undefined,
-  city: "san-francisco" | "vancouver" = "san-francisco"
+  city: "san-francisco" | "vancouver" | "columbus" = "san-francisco"
 ): { lat: number; lng: number } | undefined {
   if (!text || city !== "vancouver") return undefined;
   const normalized = text.toLowerCase().replace(/[^\w\s-]/g, " ").replace(/\s+/g, " ").trim();

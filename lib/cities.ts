@@ -1,6 +1,6 @@
 import type { Source } from "@/lib/scrapers/types";
 
-export const CITY_IDS = ["san-francisco", "vancouver"] as const;
+export const CITY_IDS = ["san-francisco", "vancouver", "columbus"] as const;
 export type CityId = (typeof CITY_IDS)[number];
 export type ScraperKey = Source | `apify:${Source}`;
 
@@ -76,6 +76,20 @@ export const CITIES: Record<
     paused: false,
     mapCenter: [49.2827, -123.1207],
     mapZoom: 12,
+  },
+  columbus: {
+    name: "Columbus",
+    shortName: "Columbus",
+    currency: "USD",
+    currencySymbol: "$",
+    geocodeSuffix: "Columbus, OH",
+    defaultMaxPrice: 3000,
+    defaultBedrooms: null,
+    recipients: ["viraat@exla.ai", "Vaageesha Das <vaageesha.das@gmail.com>"],
+    sources: ["craigslist", "zumper", "apify:zillow"],
+    paused: false,
+    mapCenter: [39.9612, -82.9988],
+    mapZoom: 11,
   },
 };
 
