@@ -4,7 +4,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import type { ScrapeResult } from "./scrapers";
 import { checkApifyBalance, type ApifyBalance } from "./apify-balance";
 import { CITIES, DEFAULT_CITY, type CityId } from "./cities";
-import { formatMoney, normalizeDisplayText } from "./utils";
+import { formatMoney, normalizeDisplayText, upgradePhotoUrl } from "./utils";
 
 const FROM = process.env.EMAIL_FROM ?? "apt-tinder <onboarding@resend.dev>";
 
@@ -151,7 +151,7 @@ function pickFeatured(rows: (typeof schema.listings.$inferSelect)[], city: CityI
       title: r.title,
       price: r.price ?? 0,
       neighborhood: r.neighborhood,
-      photo: photos[0] ?? null,
+      photo: photos[0] ? upgradePhotoUrl(photos[0]) : null,
       url: sources[0]?.url ?? "",
       source: sources[0]?.source ?? "?",
       bedrooms: r.bedrooms,
@@ -183,7 +183,7 @@ function pickMore(
         title: r.title,
         price: r.price ?? 0,
         neighborhood: r.neighborhood,
-        photo: photos[0] ?? null,
+        photo: photos[0] ? upgradePhotoUrl(photos[0]) : null,
         url: sources[0]?.url ?? "",
         source: sources[0]?.source ?? "?",
         bedrooms: r.bedrooms,

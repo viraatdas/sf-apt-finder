@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
 import { CITIES, DEFAULT_CITY, type CityId } from "@/lib/cities";
-import { formatMoney, normalizeDisplayText } from "@/lib/utils";
+import { formatMoney, normalizeDisplayText, upgradePhotoUrl } from "@/lib/utils";
 
 // Fix default marker icons in webpack
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -147,7 +147,7 @@ export function ListingMap({
                 ? "#f59e0b" // amber
                 : "#94a3b8"; // muted slate gray for undecided
         const icon = p.highlighted
-          ? CurrentIcon({ price: p.price, photoUrl: p.photoUrl, city })
+          ? CurrentIcon({ price: p.price, photoUrl: upgradePhotoUrl(p.photoUrl), city })
           : PriceIcon({ price: p.price, color, highlighted: p.highlighted, city });
         return (
           <Marker
@@ -161,7 +161,7 @@ export function ListingMap({
                 {p.photoUrl && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={p.photoUrl}
+                    src={upgradePhotoUrl(p.photoUrl)}
                     alt={normalizeDisplayText(p.title)}
                     style={{
                       width: "100%",

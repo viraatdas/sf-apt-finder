@@ -3,7 +3,7 @@ import { Bed, Bath, Maximize2, MapPin, ExternalLink } from "lucide-react";
 import { cityFromParam, maxPriceFromParam, type CityId } from "@/lib/cities";
 import { SourceStrip } from "@/components/source-strip";
 import { sourceFromParam, sourceLabel } from "@/lib/sources";
-import { formatMoney, normalizeDisplayText } from "@/lib/utils";
+import { formatMoney, normalizeDisplayText, upgradePhotoUrl } from "@/lib/utils";
 import { countMatchingListings, listLikedListings, type LikedListingRow } from "@/lib/listings/query";
 import { currentUserId } from "@/lib/server-user";
 
@@ -163,7 +163,7 @@ function ListingCard({
         {photo ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={photo}
+            src={upgradePhotoUrl(photo)}
             alt={normalizeDisplayText(listing.title)}
             className="w-full h-full object-cover"
             loading="lazy"

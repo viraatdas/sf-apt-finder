@@ -23,7 +23,7 @@ import {
   ChevronLeft, ChevronRight, RotateCcw,
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { formatMoney, normalizeDisplayText } from "@/lib/utils";
+import { formatMoney, normalizeDisplayText, upgradePhotoUrl } from "@/lib/utils";
 import type { Listing } from "@/lib/db/schema";
 import type { CityId } from "@/lib/cities";
 import { sourceFromParam, sourceLabel } from "@/lib/sources";
@@ -441,7 +441,7 @@ const SwipeCard = forwardRef<CardHandle, {
           {currentPhoto ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={currentPhoto}
+              src={upgradePhotoUrl(currentPhoto)}
               alt={normalizeDisplayText(listing.title)}
               className="w-full h-full object-cover select-none"
               draggable={false}

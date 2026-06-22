@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { SlidersHorizontal } from "lucide-react";
+import { ChevronDown, SlidersHorizontal } from "lucide-react";
 import { moveFocusWithArrowKeys } from "@/components/arrow-key-nav";
 import { CITIES, CITY_IDS, cityFromParam, maxPriceFromParam, type CityId } from "@/lib/cities";
 
@@ -79,31 +79,23 @@ export function CityNav() {
       onKeyDown={moveFocusWithArrowKeys}
       className="flex flex-wrap gap-1.5 text-sm items-center justify-end"
     >
-      <div
-        role="group"
-        aria-label="City"
-        className="flex items-center rounded-full border border-ink-100 bg-ink-50 p-0.5"
-      >
-        {CITY_IDS.map((cityId) => {
-          const active = cityId === city;
-          return (
-            <button
-              key={cityId}
-              type="button"
-              onClick={() => changeCity(cityId)}
-              aria-pressed={active}
-              className={
-                "inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-ink-900/20 " +
-                (active
-                  ? "bg-ink-900 text-white shadow-sm"
-                  : "text-ink-900/60 hover:text-ink-900 hover:bg-white")
-              }
-            >
-              <span aria-hidden="true">{CITY_FLAGS[cityId]}</span>
-              {CITIES[cityId].name}
-            </button>
-          );
-        })}
+      <div className="relative">
+        <select
+          aria-label="City"
+          value={city}
+          onChange={(event) => changeCity(event.target.value as CityId)}
+          className="h-9 cursor-pointer appearance-none rounded-full border border-ink-100 bg-white pl-3 pr-8 text-sm font-semibold hover:bg-ink-50 focus:outline-none focus:ring-2 focus:ring-ink-900/20"
+        >
+          {CITY_IDS.map((cityId) => (
+            <option key={cityId} value={cityId}>
+              {CITY_FLAGS[cityId]} {CITIES[cityId].name}
+            </option>
+          ))}
+        </select>
+        <ChevronDown
+          className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-900/45"
+          aria-hidden="true"
+        />
       </div>
       <div className="flex items-center gap-2.5 rounded-full border border-ink-100 bg-white px-3.5 py-1.5">
         <SlidersHorizontal className="h-4 w-4 text-ink-900/45" aria-hidden="true" />
