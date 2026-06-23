@@ -66,18 +66,18 @@ export function MapPageClient({
     .sort((a, b) => Number(Boolean(b.photoUrl)) - Number(Boolean(a.photoUrl)));
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4 max-w-[1600px] mx-auto p-4 lg:p-6">
-      {/* Sidebar: neighborhoods */}
-      <aside className="space-y-4 lg:max-h-[calc(100vh-9rem)] lg:overflow-y-auto no-scrollbar">
+    <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4 max-w-[1600px] mx-auto p-3 sm:p-4 lg:p-6">
+      {/* Sidebar: neighborhoods — below the map on mobile, beside it on desktop. */}
+      <aside className="order-2 lg:order-1 space-y-4 lg:max-h-[calc(100vh-9rem)] lg:overflow-y-auto no-scrollbar">
         <div>
           <div className="text-xs uppercase tracking-wide text-ink-900/50 mb-2">Filter</div>
-          <div className="flex flex-wrap gap-1">
+          <div className="flex gap-1.5 overflow-x-auto no-scrollbar -mx-1 px-1 sm:flex-wrap sm:overflow-visible sm:mx-0 sm:px-0">
             {(["all", "undecided", "yes", "maybe", "no"] as const).map((f) => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
                 className={
-                  "text-xs px-3 py-1.5 rounded-full border " +
+                  "shrink-0 text-sm sm:text-xs px-3.5 py-2 sm:py-1.5 rounded-full border capitalize " +
                   (filter === f
                     ? "bg-ink-900 text-white border-ink-900"
                     : "bg-white border-ink-100 hover:bg-ink-50")
@@ -130,8 +130,8 @@ export function MapPageClient({
       </aside>
 
       {/* Map + list */}
-      <div className="grid grid-rows-[1fr_auto] gap-4">
-        <div className="h-[60vh] lg:h-[calc(100vh-9rem)] rounded-2xl overflow-hidden border border-ink-100 shadow-sm">
+      <div className="order-1 lg:order-2 grid grid-rows-[1fr_auto] gap-4">
+        <div className="h-[62svh] lg:h-[calc(100vh-9rem)] rounded-2xl overflow-hidden border border-ink-100 shadow-sm">
           <ListingMap pins={pins} focus={focus} city={city} />
         </div>
       </div>

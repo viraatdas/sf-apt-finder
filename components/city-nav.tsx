@@ -78,7 +78,7 @@ export function CityNav() {
     <nav
       aria-label="Primary"
       onKeyDown={moveFocusWithArrowKeys}
-      className="flex flex-wrap gap-1.5 text-sm items-center justify-end"
+      className="flex flex-wrap gap-2 text-sm items-center w-full sm:w-auto justify-between sm:justify-end"
     >
       <div className="relative">
         <select
@@ -98,9 +98,9 @@ export function CityNav() {
           aria-hidden="true"
         />
       </div>
-      <div className="flex items-center gap-2.5 rounded-full border border-ink-100 bg-white px-3.5 py-1.5">
-        <SlidersHorizontal className="h-4 w-4 text-ink-900/45" aria-hidden="true" />
-        <label className="flex items-center gap-2.5">
+      <div className="flex items-center gap-2.5 rounded-full border border-ink-100 bg-white px-3.5 py-2 order-last w-full sm:order-none sm:w-auto sm:py-1.5">
+        <SlidersHorizontal className="h-4 w-4 shrink-0 text-ink-900/45" aria-hidden="true" />
+        <label className="flex flex-1 items-center gap-2.5 sm:flex-none">
           <span className="text-xs font-semibold text-ink-900/60 whitespace-nowrap">Max</span>
           <span className="text-[10px] text-ink-900/35 tabular-nums">
             ${(priceMin / 1000).toFixed(1)}k
@@ -116,7 +116,7 @@ export function CityNav() {
             value={priceInput}
             onInput={(event) => setPriceInput(Number(event.currentTarget.value))}
             onChange={(event) => setPriceInput(Number(event.target.value))}
-            className="price-slider w-36 sm:w-44"
+            className="price-slider min-w-0 flex-1 sm:w-44 sm:flex-none"
             style={{
               background: `linear-gradient(to right, #0a0a0c 0%, #0a0a0c ${pricePct}%, #ececef ${pricePct}%, #ececef 100%)`,
             }}
@@ -125,23 +125,25 @@ export function CityNav() {
             ${(priceMax / 1000).toFixed(0)}k
           </span>
           <output
-            className="w-[4.5rem] text-right text-sm font-bold tabular-nums text-ink-900"
+            className="w-[4.5rem] shrink-0 text-right text-sm font-bold tabular-nums text-ink-900"
             aria-live="polite"
           >
             ${priceInput.toLocaleString()}
           </output>
         </label>
       </div>
-      {NAV_ITEMS.map((item) => (
-        <Link
-          key={item.href}
-          href={hrefFor(item.href)}
-          data-arrow-nav-item
-          className="px-3 py-1.5 rounded-full hover:bg-ink-100 focus:outline-none focus:ring-2 focus:ring-ink-900/20"
-        >
-          {item.label}
-        </Link>
-      ))}
+      <div className="flex items-center gap-1.5">
+        {NAV_ITEMS.map((item) => (
+          <Link
+            key={item.href}
+            href={hrefFor(item.href)}
+            data-arrow-nav-item
+            className="inline-flex min-h-[40px] items-center rounded-full px-3 py-2 font-medium hover:bg-ink-100 focus:outline-none focus:ring-2 focus:ring-ink-900/20"
+          >
+            {item.label}
+          </Link>
+        ))}
+      </div>
     </nav>
   );
 }

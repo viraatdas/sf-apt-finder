@@ -38,18 +38,20 @@ export function SourceStrip({
       onKeyDown={moveFocusWithArrowKeys}
       className={`max-w-[1900px] mx-auto px-4 xl:px-6 ${className}`}
     >
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-ink-100 bg-white px-3 py-2 text-xs text-ink-900/60 shadow-sm">
+      <div className="flex flex-nowrap items-center gap-2 overflow-x-auto no-scrollbar rounded-lg border border-ink-100 bg-white px-3 py-2 text-xs text-ink-900/60 shadow-sm sm:flex-wrap sm:overflow-visible">
         {matchingCount != null && maxPrice != null && (
-          <span className="mr-1 font-semibold text-ink-900">
-            {matchingCount.toLocaleString()} current listings under {formatMoney(maxPrice, city)}
+          <span className="mr-1 shrink-0 whitespace-nowrap font-semibold text-ink-900">
+            {matchingCount.toLocaleString()}
+            <span className="hidden sm:inline"> current listings</span> under{" "}
+            {formatMoney(maxPrice, city)}
           </span>
         )}
-        <span className="font-semibold text-ink-900">Sources</span>
+        <span className="shrink-0 font-semibold text-ink-900">Sources</span>
         <Link
           href={hrefFor(null)}
           data-arrow-nav-item
           className={
-            "inline-flex h-7 items-center rounded-full border px-2.5 font-medium transition focus:outline-none focus:ring-2 focus:ring-ink-900/20 " +
+            "inline-flex h-7 shrink-0 items-center rounded-full border px-2.5 font-medium transition focus:outline-none focus:ring-2 focus:ring-ink-900/20 " +
             (!activeSource
               ? "border-ink-900 bg-ink-900 text-white"
               : "border-ink-100 bg-ink-50 text-ink-900 hover:bg-ink-100")

@@ -50,6 +50,9 @@ export const metadata: Metadata = {
 export const viewport = {
   themeColor: "#ec4899",
   colorScheme: "light" as const,
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover" as const,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -68,7 +71,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </div>
         </header>
         <main>{children}</main>
-        <footer className="border-t border-ink-100 mt-12 py-6 text-center text-sm text-ink-900/60">
+        <footer className="border-t border-ink-100 mt-12 py-6 text-center text-sm text-ink-900/60 safe-bottom">
           <p>
             Like what you see? Want to collab on a place?{" "}
             <a

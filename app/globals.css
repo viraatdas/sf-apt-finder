@@ -9,12 +9,48 @@
   --fg: #0a0a0c;
 }
 
+html {
+  /* Stop iOS from auto-inflating text in landscape; avoid pull-to-refresh
+     hijacking vertical drags during a swipe session. */
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior-y: none;
+}
+
 html,
 body {
   background: var(--bg);
   color: var(--fg);
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto;
   -webkit-font-smoothing: antialiased;
+}
+
+/* No grey flash on tap for touch controls. */
+@media (pointer: coarse) {
+  a,
+  button,
+  select,
+  [role="button"],
+  input[type="range"] {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* Respect the home-indicator / notch insets. */
+.safe-bottom {
+  padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+}
+
+/* Honor reduced-motion: neutralize CSS animations/transitions (e.g. the map
+   pin pulse, slider/hover transitions). Core swipe gestures stay usable. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 * {

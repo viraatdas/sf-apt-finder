@@ -199,14 +199,14 @@ export function SwipeDeck({ initial, city }: { initial: Listing[]; city: CityId 
   }
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-[minmax(420px,0.95fr)_minmax(600px,780px)] gap-4 xl:gap-6 max-w-[1800px] mx-auto px-4 py-3 xl:px-6 xl:py-4">
-      {/* Map */}
-      <div className="h-[34vh] md:h-[40vh] xl:h-[calc(100vh-10.5rem)] rounded-2xl overflow-hidden border border-ink-100 shadow-sm">
+    <div className="grid grid-cols-1 xl:grid-cols-[minmax(420px,0.95fr)_minmax(600px,780px)] gap-3 xl:gap-6 max-w-[1800px] mx-auto px-3 py-3 sm:px-4 xl:px-6 xl:py-4">
+      {/* Map — secondary on mobile (below the card), left column on desktop. */}
+      <div className="order-2 xl:order-1 h-[36vh] md:h-[40vh] xl:h-[calc(100vh-10.5rem)] rounded-2xl overflow-hidden border border-ink-100 shadow-sm">
         <ListingMap pins={pins} focus={focus} city={city} />
       </div>
 
-      {/* Card deck */}
-      <div className="relative h-[68vh] min-h-[620px] xl:h-[calc(100vh-10.5rem)] xl:min-h-0">
+      {/* Card deck — primary on mobile (fills the viewport, shown first). */}
+      <div className="relative order-1 xl:order-2 h-[calc(100svh-8.5rem)] min-h-[440px] xl:h-[calc(100vh-10.5rem)] xl:min-h-0">
         <AnimatePresence mode="popLayout">
           {deck.slice(0, 3).reverse().map((listing, i, arr) => {
             const isTop = i === arr.length - 1;
@@ -244,7 +244,9 @@ export function SwipeDeck({ initial, city }: { initial: Listing[]; city: CityId 
 
 function ShortcutBar() {
   return (
-    <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[130]">
+    // Keyboard hints are pointless on touch devices — only show where a real
+    // keyboard exists (fine pointer + hover).
+    <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[130] hidden [@media(hover:hover)_and_(pointer:fine)]:block">
       <div className="bg-white/90 backdrop-blur border border-ink-100 shadow-sm rounded-full px-3.5 py-1.5 flex items-center gap-2 text-[11px] font-medium text-ink-900/70">
         <Kbd>←</Kbd><span className="text-accent-no font-semibold">nope</span>
         <span className="text-ink-900/20">·</span>
@@ -674,7 +676,7 @@ function ActionBar({
   hoverDecision: Decision | null;
 }) {
   return (
-    <div className="absolute bottom-4 left-0 right-0 flex justify-center items-center gap-2.5 z-[120] px-3">
+    <div className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-0 right-0 flex justify-center items-center gap-2.5 z-[120] px-3">
       {canUndo && (
         <motion.button
           whileHover={{ scale: 1.08 }}
