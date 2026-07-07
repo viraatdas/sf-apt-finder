@@ -1,8 +1,6 @@
 name: Browser scrape (daily)
 
 on:
-  schedule:
-    - cron: "10 14 * * *"
   workflow_dispatch:
     inputs:
       city:
@@ -12,7 +10,7 @@ on:
       send_email:
         description: "Send digest email"
         required: false
-        default: "true"
+        default: "false"
       sources:
         description: "Optional single source (livrent | rentals-ca | padmapper | hotpads | apartments-com)"
         required: false
@@ -46,9 +44,7 @@ jobs:
       - name: Run browser scrape
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
-          EMAIL_TO: ${{ secrets.EMAIL_TO }}
           SITE_URL: ${{ secrets.SITE_URL }}
           SEARCH_CITY: ${{ github.event.inputs.city || matrix.city }}
           SEARCH_BEDROOMS: ${{ github.event.inputs.bedrooms || '' }}
